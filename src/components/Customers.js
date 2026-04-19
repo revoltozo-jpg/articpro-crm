@@ -3,7 +3,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { db } from '../firebase';
 import './Shared.css';
 
-export default function Customers({ detail, setDetail, goDetail, isAdmin }) {
+export default function Customers({ detail, setDetail, goDetail, perms }) {
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState('');
@@ -70,12 +70,8 @@ export default function Customers({ detail, setDetail, goDetail, isAdmin }) {
         </div>
         <div className="topbar-actions">
           <span className={`badge ${selected.status}`}>{selected.status}</span>
-          <button className="btn" onClick={() => openForm(selected)}>Edit</button>
-          {isAdmin && (
-            <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>
-              Delete
-            </button>
-          )}
+          {perms.canEdit && <button className="btn" onClick={() => openForm(selected)}>Edit</button>}
+          {perms.canDelete && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
         </div>
       </div>
       <div className="content">
@@ -117,14 +113,7 @@ export default function Customers({ detail, setDetail, goDetail, isAdmin }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="Edit customer" fields={customerFields} />}
-      {deleteConfirm && (
-        <DeleteModal
-          title="Delete customer"
-          message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`}
-          onConfirm={() => deleteRecord(deleteConfirm)}
-          onCancel={() => setDeleteConfirm(null)}
-        />
-      )}
+      {deleteConfirm && <DeleteModal title="Delete customer" message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 
@@ -134,13 +123,18 @@ export default function Customers({ detail, setDetail, goDetail, isAdmin }) {
         <h1>Customers</h1>
         <div className="topbar-actions">
           <input className="search" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
-          <button className="btn btn-primary" onClick={() => openForm()}>+ New customer</button>
+          {perms.canCreate && <button className="btn btn-primary" onClick={() => openForm()}>+ New customer</button>}
         </div>
       </div>
       <div className="content">
         <div className="card">
           <table className="tbl">
-            <thead><tr><th>Company</th><th>Contact</th><th>Industry</th><th>Units</th><th>Status</th>{isAdmin && <th>Actions</th>}</tr></thead>
+            <thead>
+              <tr>
+                <th>Company</th><th>Contact</th><th>Industry</th><th>Units</th><th>Status</th>
+                {perms.canDelete && <th>Actions</th>}
+              </tr>
+            </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr><td colSpan="6" style={{ textAlign: 'center', padding: 30, color: '#6b7280' }}>No customers yet</td></tr>
@@ -152,7 +146,7 @@ export default function Customers({ detail, setDetail, goDetail, isAdmin }) {
                   <td>{c.industry}</td>
                   <td>{c.units}</td>
                   <td><span className={`badge ${c.status}`}>{c.status}</span></td>
-                  {isAdmin && (
+                  {perms.canDelete && (
                     <td onClick={e => e.stopPropagation()}>
                       <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(c)}>Delete</button>
                     </td>
@@ -164,14 +158,7 @@ export default function Customers({ detail, setDetail, goDetail, isAdmin }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New customer" fields={customerFields} />}
-      {deleteConfirm && (
-        <DeleteModal
-          title="Delete customer"
-          message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`}
-          onConfirm={() => deleteRecord(deleteConfirm)}
-          onCancel={() => setDeleteConfirm(null)}
-        />
-      )}
+      {deleteConfirm && <DeleteModal title="Delete customer" message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 }

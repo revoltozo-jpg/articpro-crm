@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { Modal, DeleteModal } from './Customers';
 import './Shared.css';
 
-export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
+export default function Orders({ detail, setDetail, goDetail, perms }) {
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [pos, setPOs] = useState([]);
@@ -62,6 +62,7 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
   };
 
   const fmt = n => '$' + Number(n).toLocaleString();
+  const statuses = ['Quoted', 'Pending', 'In Progress', 'Active', 'Delivered', 'On Hold'];
 
   const orderFields = [
     { key: 'customerId', label: 'Customer', type: 'select', options: customers.map(c => ({ value: c.id, label: c.name })) },
@@ -69,23 +70,13 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
     { key: 'qty', label: 'Quantity', type: 'number' },
     { key: 'unitPrice', label: 'Unit price ($)', type: 'number' },
     { key: 'date', label: 'Order date', type: 'date' },
-    { key: 'status', label: 'Status', type: 'select', options: [
-      { value: 'Quoted', label: 'Quoted' },
-      { value: 'Pending', label: 'Pending' },
-      { value: 'In Progress', label: 'In Progress' },
-      { value: 'Active', label: 'Active' },
-      { value: 'Delivered', label: 'Delivered' },
-      { value: 'On Hold', label: 'On Hold' },
-    ]},
+    { key: 'status', label: 'Status', type: 'select', options: statuses.map(s => ({ value: s, label: s })) },
     { key: 'notes', label: 'Notes', type: 'textarea' },
   ];
-
-  const statuses = ['Quoted', 'Pending', 'In Progress', 'Active', 'Delivered', 'On Hold'];
 
   if (selected) {
     const po = pos.find(p => p.relatedSO === selected.id);
     const totalValue = Number(selected.qty) * Number(selected.unitPrice);
-
     return (
       <div className="page">
         <div className="topbar">
@@ -95,9 +86,9 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
           </div>
           <div className="topbar-actions">
             <span className={`badge ${selected.status}`}>{selected.status}</span>
-            <button className="btn" onClick={() => openForm(selected)}>Edit order</button>
-            {!po && <button className="btn btn-primary" onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create vendor PO</button>}
-            {isAdmin && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
+            {perms.canEdit && <button className="btn" onClick={() => openForm(selected)}>Edit order</button>}
+            {!po && perms.canCreate && !perms.salesOnly && <button className="btn btn-primary" onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create vendor PO</button>}
+            {perms.canDelete && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
           </div>
         </div>
         <div className="content">
@@ -135,14 +126,8 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
                       <span className={`badge ${po.status}`}>{po.status}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div className="info-box">
-                        <div className="info-box-label">PO cost</div>
-                        <div className="info-box-value">{fmt(po.total)}</div>
-                      </div>
-                      <div className="info-box">
-                        <div className="info-box-label">Expected delivery</div>
-                        <div className="info-box-value">{po.expectedDate || '—'}</div>
-                      </div>
+                      <div className="info-box"><div className="info-box-label">PO cost</div><div className="info-box-value">{fmt(po.total)}</div></div>
+                      <div className="info-box"><div className="info-box-label">Expected delivery</div><div className="info-box-value">{po.expectedDate || '—'}</div></div>
                     </div>
                   </>
                 ) : (
@@ -150,7 +135,9 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
                     <div style={{ fontSize: 28, marginBottom: 8 }}>📦</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>No vendor PO yet</div>
                     <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>Create a purchase order to start fulfilling this order</div>
-                    <button className="btn btn-primary" onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create vendor PO</button>
+                    {perms.canCreate && !perms.salesOnly && (
+                      <button className="btn btn-primary" onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create vendor PO</button>
+                    )}
                   </div>
                 )}
               </div>
@@ -160,10 +147,7 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
                   <div className="margin-box">
                     <div className="margin-row"><span>Customer order value</span><span style={{ fontWeight: 600, color: '#0f172a' }}>{fmt(totalValue)}</span></div>
                     <div className="margin-row"><span>Vendor PO cost</span><span style={{ fontWeight: 600, color: '#0f172a' }}>{fmt(po.total)}</span></div>
-                    <div className="margin-row">
-                      <span>Gross margin</span>
-                      <span className="margin-positive">{fmt(totalValue - po.total)} ({Math.round((totalValue - po.total) / totalValue * 100)}%)</span>
-                    </div>
+                    <div className="margin-row"><span>Gross margin</span><span className="margin-positive">{fmt(totalValue - po.total)} ({Math.round((totalValue - po.total) / totalValue * 100)}%)</span></div>
                   </div>
                 </div>
               )}
@@ -194,7 +178,7 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
           </div>
         </div>
         {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="Edit order" fields={orderFields} />}
-        {deleteConfirm && <DeleteModal title="Delete order" message={`Are you sure you want to delete order ${deleteConfirm.id}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
+        {deleteConfirm && <DeleteModal title="Delete order" message={`Delete order ${deleteConfirm.id}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
       </div>
     );
   }
@@ -209,7 +193,7 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
             <option value="">All statuses</option>
             {statuses.map(s => <option key={s}>{s}</option>)}
           </select>
-          <button className="btn btn-primary" onClick={() => openForm()}>+ New order</button>
+          {perms.canCreate && <button className="btn btn-primary" onClick={() => openForm()}>+ New order</button>}
         </div>
       </div>
       <div className="content">
@@ -220,34 +204,20 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
             { label: 'In progress', val: orders.filter(o => o.status === 'In Progress').length },
             { label: 'No vendor PO', val: orders.filter(o => ['Pending','In Progress'].includes(o.status) && !o.vendorPO).length },
           ].map(m => (
-            <div key={m.label} className="metric">
-              <div className="metric-label">{m.label}</div>
-              <div className="metric-val">{m.val}</div>
-            </div>
+            <div key={m.label} className="metric"><div className="metric-label">{m.label}</div><div className="metric-val">{m.val}</div></div>
           ))}
         </div>
         <div className="card">
           <table className="tbl">
             <thead>
               <tr>
-                <th>Customer</th>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Value</th>
-                <th>Date</th>
-                <th>Vendor PO</th>
-                <th>Status</th>
-                {isAdmin && <th>Actions</th>}
+                <th>Customer</th><th>Product</th><th>Qty</th><th>Value</th><th>Date</th><th>Vendor PO</th><th>Status</th>
+                {perms.canDelete && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan="8">
-                  <div className="empty-state">
-                    <div className="empty-state-icon">📋</div>
-                    <div className="empty-state-title">No orders found</div>
-                  </div>
-                </td></tr>
+                <tr><td colSpan="8"><div className="empty-state"><div className="empty-state-icon">📋</div><div className="empty-state-title">No orders found</div></div></td></tr>
               )}
               {filtered.map(o => {
                 const po = pos.find(p => p.relatedSO === o.id);
@@ -258,14 +228,9 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
                     <td>{o.qty}</td>
                     <td style={{ fontWeight: 600 }}>${(Number(o.qty) * Number(o.unitPrice)).toLocaleString()}</td>
                     <td style={{ color: '#94a3b8', fontSize: 12 }}>{o.date || '—'}</td>
-                    <td>
-                      {po
-                        ? <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 500 }}>{po.id}</span>
-                        : <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 500 }}>⚠ None</span>
-                      }
-                    </td>
+                    <td>{po ? <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 500 }}>{po.id}</span> : <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 500 }}>⚠ None</span>}</td>
                     <td><span className={`badge ${o.status}`}>{o.status}</span></td>
-                    {isAdmin && (
+                    {perms.canDelete && (
                       <td onClick={e => e.stopPropagation()}>
                         <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(o)}>Delete</button>
                       </td>
@@ -278,7 +243,7 @@ export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New customer order" fields={orderFields} />}
-      {deleteConfirm && <DeleteModal title="Delete order" message={`Are you sure you want to delete order ${deleteConfirm.id}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
+      {deleteConfirm && <DeleteModal title="Delete order" message={`Delete order ${deleteConfirm.id}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 }

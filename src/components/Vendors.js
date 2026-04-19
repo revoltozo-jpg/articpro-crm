@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { Modal, DeleteModal } from './Customers';
 import './Shared.css';
 
-export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
+export default function Vendors({ detail, setDetail, goDetail, perms }) {
   const [vendors, setVendors] = useState([]);
   const [pos, setPOs] = useState([]);
   const [search, setSearch] = useState('');
@@ -71,8 +71,8 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
         </div>
         <div className="topbar-actions">
           <span className={`badge ${selected.status}`}>{selected.status}</span>
-          <button className="btn" onClick={() => openForm(selected)}>Edit vendor</button>
-          {isAdmin && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
+          {perms.canEdit && !perms.salesOnly && <button className="btn" onClick={() => openForm(selected)}>Edit vendor</button>}
+          {perms.canDelete && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
         </div>
       </div>
       <div className="content">
@@ -92,43 +92,24 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
           </div>
           <div className="card">
             <div className="section-title">Purchase order summary</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-              <div className="info-box">
-                <div className="info-box-label">Total POs</div>
-                <div className="info-box-value">{pos.filter(p => p.vendorId === selected.id).length}</div>
-              </div>
-              <div className="info-box">
-                <div className="info-box-label">Open POs</div>
-                <div className="info-box-value">{pos.filter(p => p.vendorId === selected.id && p.status !== 'Received').length}</div>
-              </div>
-              <div className="info-box">
-                <div className="info-box-label">Total spent</div>
-                <div className="info-box-value">${pos.filter(p => p.vendorId === selected.id).reduce((a, p) => a + Number(p.total), 0).toLocaleString()}</div>
-              </div>
-              <div className="info-box">
-                <div className="info-box-label">Received</div>
-                <div className="info-box-value">{pos.filter(p => p.vendorId === selected.id && p.status === 'Received').length}</div>
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="info-box"><div className="info-box-label">Total POs</div><div className="info-box-value">{pos.filter(p => p.vendorId === selected.id).length}</div></div>
+              <div className="info-box"><div className="info-box-label">Open POs</div><div className="info-box-value">{pos.filter(p => p.vendorId === selected.id && p.status !== 'Received').length}</div></div>
+              <div className="info-box"><div className="info-box-label">Total spent</div><div className="info-box-value">${pos.filter(p => p.vendorId === selected.id).reduce((a, p) => a + Number(p.total), 0).toLocaleString()}</div></div>
+              <div className="info-box"><div className="info-box-label">Received</div><div className="info-box-value">{pos.filter(p => p.vendorId === selected.id && p.status === 'Received').length}</div></div>
             </div>
           </div>
         </div>
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div className="section-title" style={{ margin: 0 }}>Purchase orders</div>
-            <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => goDetail('purchase_orders', 'new:vendor:' + selected.id)}>+ New PO</button>
+            {perms.canCreate && !perms.salesOnly && <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => goDetail('purchase_orders', 'new:vendor:' + selected.id)}>+ New PO</button>}
           </div>
           <table className="tbl">
-            <thead>
-              <tr><th>PO</th><th>Linked order</th><th>Items</th><th>Total</th><th>Expected</th><th>Status</th></tr>
-            </thead>
+            <thead><tr><th>PO</th><th>Linked order</th><th>Items</th><th>Total</th><th>Expected</th><th>Status</th></tr></thead>
             <tbody>
               {pos.filter(p => p.vendorId === selected.id).length === 0 && (
-                <tr><td colSpan="6">
-                  <div className="empty-state">
-                    <div className="empty-state-icon">📦</div>
-                    <div className="empty-state-title">No purchase orders yet</div>
-                  </div>
-                </td></tr>
+                <tr><td colSpan="6"><div className="empty-state"><div className="empty-state-icon">📦</div><div className="empty-state-title">No purchase orders yet</div></div></td></tr>
               )}
               {pos.filter(p => p.vendorId === selected.id).map(p => (
                 <tr key={p.id} onClick={() => goDetail('purchase_orders', p.id)}>
@@ -145,7 +126,7 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="Edit vendor" fields={vendorFields} />}
-      {deleteConfirm && <DeleteModal title="Delete vendor" message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
+      {deleteConfirm && <DeleteModal title="Delete vendor" message={`Delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 
@@ -155,7 +136,7 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
         <h1>Vendors</h1>
         <div className="topbar-actions">
           <input className="search" placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)} />
-          <button className="btn btn-primary" onClick={() => openForm()}>+ New vendor</button>
+          {perms.canCreate && !perms.salesOnly && <button className="btn btn-primary" onClick={() => openForm()}>+ New vendor</button>}
         </div>
       </div>
       <div className="content">
@@ -166,10 +147,7 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
             { label: 'Active', val: vendors.filter(v => v.status === 'Active').length },
             { label: 'Inactive', val: vendors.filter(v => v.status === 'Inactive').length },
           ].map(m => (
-            <div key={m.label} className="metric">
-              <div className="metric-label">{m.label}</div>
-              <div className="metric-val">{m.val}</div>
-            </div>
+            <div key={m.label} className="metric"><div className="metric-label">{m.label}</div><div className="metric-val">{m.val}</div></div>
           ))}
         </div>
         <div className="card">
@@ -177,17 +155,12 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
             <thead>
               <tr>
                 <th>Vendor</th><th>Contact</th><th>Email</th><th>Territory</th><th>Lead time</th><th>Status</th>
-                {isAdmin && <th>Actions</th>}
+                {perms.canDelete && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan="7">
-                  <div className="empty-state">
-                    <div className="empty-state-icon">🏭</div>
-                    <div className="empty-state-title">No vendors yet</div>
-                  </div>
-                </td></tr>
+                <tr><td colSpan="7"><div className="empty-state"><div className="empty-state-icon">🏭</div><div className="empty-state-title">No vendors yet</div></div></td></tr>
               )}
               {filtered.map(v => (
                 <tr key={v.id} onClick={() => setDetail(v.id)}>
@@ -197,7 +170,7 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
                   <td style={{ color: '#64748b' }}>{v.territory}</td>
                   <td style={{ color: '#64748b' }}>{v.leadTime}</td>
                   <td><span className={`badge ${v.status}`}>{v.status}</span></td>
-                  {isAdmin && (
+                  {perms.canDelete && (
                     <td onClick={e => e.stopPropagation()}>
                       <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(v)}>Delete</button>
                     </td>
@@ -209,7 +182,7 @@ export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New vendor" fields={vendorFields} />}
-      {deleteConfirm && <DeleteModal title="Delete vendor" message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
+      {deleteConfirm && <DeleteModal title="Delete vendor" message={`Delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 }

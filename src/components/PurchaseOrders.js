@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { Modal, DeleteModal } from './Customers';
 import './Shared.css';
 
-export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin }) {
+export default function PurchaseOrders({ detail, setDetail, goDetail, perms }) {
   const [pos, setPOs] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -64,9 +64,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
       const docRef = await addDoc(collection(db, 'purchase_orders'), { ...data, status: data.status || 'Draft' });
       if (data.relatedSO) {
         const soRef = orders.find(o => o.id === data.relatedSO);
-        if (soRef) {
-          await updateDoc(doc(db, 'orders', data.relatedSO), { vendorPO: docRef.id });
-        }
+        if (soRef) await updateDoc(doc(db, 'orders', data.relatedSO), { vendorPO: docRef.id });
       }
     }
     setModal(false); load();
@@ -114,8 +112,8 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
           </div>
           <div className="topbar-actions">
             <span className={`badge ${selected.status}`}>{selected.status}</span>
-            <button className="btn" onClick={() => { setForm(selected); setModal(true); }}>Edit PO</button>
-            {isAdmin && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
+            {perms.canEdit && !perms.salesOnly && <button className="btn" onClick={() => { setForm(selected); setModal(true); }}>Edit PO</button>}
+            {perms.canDelete && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
           </div>
         </div>
         <div className="content">
@@ -173,14 +171,8 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
                       <span className={`badge ${so.status}`}>{so.status}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div className="info-box">
-                        <div className="info-box-label">Order value</div>
-                        <div className="info-box-value">{fmt(soValue)}</div>
-                      </div>
-                      <div className="info-box">
-                        <div className="info-box-label">Qty</div>
-                        <div className="info-box-value">{so.qty} unit{so.qty > 1 ? 's' : ''}</div>
-                      </div>
+                      <div className="info-box"><div className="info-box-label">Order value</div><div className="info-box-value">{fmt(soValue)}</div></div>
+                      <div className="info-box"><div className="info-box-label">Qty</div><div className="info-box-value">{so.qty} unit{so.qty > 1 ? 's' : ''}</div></div>
                     </div>
                   </>
                 ) : (
@@ -195,10 +187,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
                   <div className="margin-box">
                     <div className="margin-row"><span>Customer order value</span><span style={{ fontWeight: 600, color: '#0f172a' }}>{fmt(soValue)}</span></div>
                     <div className="margin-row"><span>Our cost to vendor</span><span style={{ fontWeight: 600, color: '#0f172a' }}>{fmt(selected.total)}</span></div>
-                    <div className="margin-row">
-                      <span>Gross margin</span>
-                      <span className="margin-positive">{fmt(margin)} ({marginPct}%)</span>
-                    </div>
+                    <div className="margin-row"><span>Gross margin</span><span className="margin-positive">{fmt(margin)} ({marginPct}%)</span></div>
                   </div>
                 </div>
               )}
@@ -206,7 +195,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
           </div>
         </div>
         {modal && <Modal form={form} setForm={setForm} save={save} close={() => { setModal(false); setForm({}); }} title="Edit purchase order" fields={poFields} />}
-        {deleteConfirm && <DeleteModal title="Delete purchase order" message={`Are you sure you want to delete ${deleteConfirm.id}? The linked customer order will be unlinked. This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
+        {deleteConfirm && <DeleteModal title="Delete purchase order" message={`Delete ${deleteConfirm.id}? The linked customer order will be unlinked. This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
       </div>
     );
   }
@@ -221,7 +210,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
             <option value="">All statuses</option>
             {statuses.map(s => <option key={s}>{s}</option>)}
           </select>
-          <button className="btn btn-primary" onClick={() => { setForm({ status: 'Draft' }); setModal(true); }}>+ New PO</button>
+          {perms.canCreate && !perms.salesOnly && <button className="btn btn-primary" onClick={() => { setForm({ status: 'Draft' }); setModal(true); }}>+ New PO</button>}
         </div>
       </div>
       <div className="content">
@@ -232,34 +221,20 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
             { label: 'In transit', val: pos.filter(p => ['Ordered','Shipped'].includes(p.status)).length },
             { label: 'Received', val: pos.filter(p => p.status === 'Received').length },
           ].map(m => (
-            <div key={m.label} className="metric">
-              <div className="metric-label">{m.label}</div>
-              <div className="metric-val">{m.val}</div>
-            </div>
+            <div key={m.label} className="metric"><div className="metric-label">{m.label}</div><div className="metric-val">{m.val}</div></div>
           ))}
         </div>
         <div className="card">
           <table className="tbl">
             <thead>
               <tr>
-                <th>PO</th>
-                <th>Vendor</th>
-                <th>Linked order</th>
-                <th>Items</th>
-                <th>Total cost</th>
-                <th>Expected</th>
-                <th>Status</th>
-                {isAdmin && <th>Actions</th>}
+                <th>PO</th><th>Vendor</th><th>Linked order</th><th>Items</th><th>Total cost</th><th>Expected</th><th>Status</th>
+                {perms.canDelete && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan="8">
-                  <div className="empty-state">
-                    <div className="empty-state-icon">🚚</div>
-                    <div className="empty-state-title">No purchase orders found</div>
-                  </div>
-                </td></tr>
+                <tr><td colSpan="8"><div className="empty-state"><div className="empty-state-icon">🚚</div><div className="empty-state-title">No purchase orders found</div></div></td></tr>
               )}
               {filtered.map(p => {
                 const so = orders.find(o => o.id === p.relatedSO);
@@ -267,17 +242,12 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
                   <tr key={p.id} onClick={() => setDetail(p.id)}>
                     <td style={{ fontWeight: 600, color: '#64748b', fontSize: 12 }}>{p.id}</td>
                     <td style={{ fontWeight: 600 }}>{p.vendorName || '—'}</td>
-                    <td>
-                      {so
-                        ? <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 500 }}>{so.id} — {so.customerName}</span>
-                        : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>
-                      }
-                    </td>
+                    <td>{so ? <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 500 }}>{so.id} — {so.customerName}</span> : <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>}</td>
                     <td style={{ color: '#64748b', fontSize: 12 }}>{p.items?.slice(0, 25)}{p.items?.length > 25 ? '...' : ''}</td>
                     <td style={{ fontWeight: 600 }}>{fmt(p.total)}</td>
                     <td style={{ color: '#94a3b8', fontSize: 12 }}>{p.expectedDate || '—'}</td>
                     <td><span className={`badge ${p.status}`}>{p.status}</span></td>
-                    {isAdmin && (
+                    {perms.canDelete && (
                       <td onClick={e => e.stopPropagation()}>
                         <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(p)}>Delete</button>
                       </td>
@@ -290,7 +260,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin })
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => { setModal(false); setForm({}); }} title="New purchase order" fields={poFields} />}
-      {deleteConfirm && <DeleteModal title="Delete purchase order" message={`Are you sure you want to delete ${deleteConfirm.id}? The linked customer order will be unlinked. This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
+      {deleteConfirm && <DeleteModal title="Delete purchase order" message={`Delete ${deleteConfirm.id}? The linked customer order will be unlinked. This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 }
