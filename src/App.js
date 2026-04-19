@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { auth, db } from './firebase';
 import Login from './components/Login';
 import Customers from './components/Customers';
 import Orders from './components/Orders';
@@ -8,6 +9,7 @@ import Vendors from './components/Vendors';
 import PurchaseOrders from './components/PurchaseOrders';
 import Dashboard from './components/Dashboard';
 import Import from './components/Import';
+import Users from './components/Users';
 import './App.css';
 
 const icons = {
@@ -16,18 +18,29 @@ const icons = {
   orders: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   vendors: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   purchase_orders: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
+  users: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
 };
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [view, setView] = useState('dashboard');
   const [detail, setDetail] = useState(null);
   const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      if (u) {
+        try {
+          const adminsSnap = await getDocs(collection(db, 'admins'));
+          const adminEmails = adminsSnap.docs.map(d => d.id);
+          setIsAdmin(adminEmails.includes(u.email));
+        } catch (err) {
+          setIsAdmin(false);
+        }
+      }
       setAuthLoading(false);
     });
     return () => unsub();
@@ -57,6 +70,7 @@ export default function App() {
       { key: 'vendors', label: 'Vendors' },
       { key: 'purchase_orders', label: 'Purchase orders' },
     ]},
+    ...(isAdmin ? [{ label: 'Admin', items: [{ key: 'users', label: 'User management' }] }] : []),
   ];
 
   return (
@@ -111,6 +125,7 @@ export default function App() {
         {view === 'orders' && <Orders detail={detail} setDetail={setDetail} goDetail={goDetail} />}
         {view === 'vendors' && <Vendors detail={detail} setDetail={setDetail} goDetail={goDetail} />}
         {view === 'purchase_orders' && <PurchaseOrders detail={detail} setDetail={setDetail} goDetail={goDetail} />}
+        {view === 'users' && isAdmin && <Users />}
       </div>
 
       {showImport && <Import onClose={() => setShowImport(false)} />}
