@@ -14,8 +14,8 @@ import Reports from './components/Reports';
 import ChangePassword from './components/ChangePassword';
 import './App.css';
 
-const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-const WARNING_BEFORE = 60 * 1000; // warn 1 minute before
+const INACTIVITY_MS = 30 * 60 * 1000;
+const WARNING_MS = 60 * 1000;
 
 const icons = {
   dashboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
@@ -41,14 +41,12 @@ function SessionWarning({ secondsLeft, onStayLoggedIn, onLogout }) {
         <div style={{ fontSize: 36, marginBottom: 12 }}>⏱</div>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Session expiring soon</div>
         <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6, lineHeight: 1.6 }}>
-          You have been inactive for a while. Your session will expire in
+          You have been inactive. Your session will expire in
         </div>
-        <div style={{ fontSize: 36, fontWeight: 800, color: '#ef4444', marginBottom: 16 }}>
+        <div style={{ fontSize: 40, fontWeight: 800, color: '#ef4444', marginBottom: 16 }}>
           {secondsLeft}s
         </div>
-        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24 }}>
-          Any unsaved changes will be lost.
-        </div>
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24 }}>Any unsaved changes will be lost.</div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
           <button onClick={onLogout} style={{ padding: '9px 20px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', color: '#64748b' }}>
             Sign out now
@@ -62,6 +60,64 @@ function SessionWarning({ secondsLeft, onStayLoggedIn, onLogout }) {
   );
 }
 
+function useInactivityTimer(user, onLogout) {
+  const [showWarning, setShowWarning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(60);
+  const lastActivityRef = useRef(Date.now());
+  const warningShownRef = useRef(false);
+  const intervalRef = useRef(null);
+  const countdownRef = useRef(null);
+
+  const resetActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    if (warningShownRef.current) {
+      warningShownRef.current = false;
+      setShowWarning(false);
+      setSecondsLeft(60);
+      clearInterval(countdownRef.current);
+    }
+  }, []);
+
+  const startCountdown = useCallback(() => {
+    warningShownRef.current = true;
+    setShowWarning(true);
+    setSecondsLeft(60);
+    clearInterval(countdownRef.current);
+    let secs = 60;
+    countdownRef.current = setInterval(() => {
+      secs -= 1;
+      setSecondsLeft(secs);
+      if (secs <= 0) {
+        clearInterval(countdownRef.current);
+        setShowWarning(false);
+        onLogout();
+      }
+    }, 1000);
+  }, [onLogout]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+    events.forEach(e => window.addEventListener(e, resetActivity, { passive: true }));
+
+    intervalRef.current = setInterval(() => {
+      const idle = Date.now() - lastActivityRef.current;
+      if (!warningShownRef.current && idle >= INACTIVITY_MS - WARNING_MS) {
+        startCountdown();
+      }
+    }, 5000);
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetActivity));
+      clearInterval(intervalRef.current);
+      clearInterval(countdownRef.current);
+    };
+  }, [user, resetActivity, startCountdown]);
+
+  return { showWarning, secondsLeft, resetActivity };
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -71,60 +127,12 @@ export default function App() {
   const [view, setView] = useState('dashboard');
   const [detail, setDetail] = useState(null);
   const [showImport, setShowImport] = useState(false);
-  const [showWarning, setShowWarning] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(60);
-
-  const timeoutRef = useRef(null);
-  const warningRef = useRef(null);
-  const countdownRef = useRef(null);
 
   const handleLogout = useCallback(() => {
-    clearTimeout(timeoutRef.current);
-    clearTimeout(warningRef.current);
-    clearInterval(countdownRef.current);
-    setShowWarning(false);
     signOut(auth);
   }, []);
 
-  const resetTimer = useCallback(() => {
-    if (!user) return;
-    clearTimeout(timeoutRef.current);
-    clearTimeout(warningRef.current);
-    clearInterval(countdownRef.current);
-    setShowWarning(false);
-
-    warningRef.current = setTimeout(() => {
-      setSecondsLeft(60);
-      setShowWarning(true);
-      countdownRef.current = setInterval(() => {
-        setSecondsLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(countdownRef.current);
-            handleLogout();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }, INACTIVITY_TIMEOUT - WARNING_BEFORE);
-
-    timeoutRef.current = setTimeout(() => {
-      handleLogout();
-    }, INACTIVITY_TIMEOUT);
-  }, [user, handleLogout]);
-
-  useEffect(() => {
-    if (!user) return;
-    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
-    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
-    resetTimer();
-    return () => {
-      events.forEach(e => window.removeEventListener(e, resetTimer));
-      clearTimeout(timeoutRef.current);
-      clearTimeout(warningRef.current);
-      clearInterval(countdownRef.current);
-    };
-  }, [user, resetTimer]);
+  const { showWarning, secondsLeft, resetActivity } = useInactivityTimer(user, handleLogout);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -199,11 +207,10 @@ export default function App() {
       {showWarning && (
         <SessionWarning
           secondsLeft={secondsLeft}
-          onStayLoggedIn={resetTimer}
+          onStayLoggedIn={resetActivity}
           onLogout={handleLogout}
         />
       )}
-
       <div className="sidebar">
         <div className="sidebar-logo">
           <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', letterSpacing: '1px' }}>PROTEC<span style={{ color: '#60a5fa' }}>®</span></div>
