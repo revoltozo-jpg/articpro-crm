@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -13,6 +13,9 @@ import Users from './components/Users';
 import Reports from './components/Reports';
 import ChangePassword from './components/ChangePassword';
 import './App.css';
+
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const WARNING_BEFORE = 60 * 1000; // warn 1 minute before
 
 const icons = {
   dashboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
@@ -31,6 +34,34 @@ export const ROLES = {
   admin:   { label: 'Admin',   canCreate: true,  canEdit: true,  canDelete: true,  canImport: true,  canManageUsers: true,  canViewReports: true,  canViewFinancials: true },
 };
 
+function SessionWarning({ secondsLeft, onStayLoggedIn, onLogout }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,41,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif' }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 32, width: 400, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>⏱</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Session expiring soon</div>
+        <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6, lineHeight: 1.6 }}>
+          You have been inactive for a while. Your session will expire in
+        </div>
+        <div style={{ fontSize: 36, fontWeight: 800, color: '#ef4444', marginBottom: 16 }}>
+          {secondsLeft}s
+        </div>
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 24 }}>
+          Any unsaved changes will be lost.
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button onClick={onLogout} style={{ padding: '9px 20px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', color: '#64748b' }}>
+            Sign out now
+          </button>
+          <button onClick={onStayLoggedIn} style={{ padding: '9px 24px', border: 'none', borderRadius: 8, background: '#1d4ed8', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Stay logged in
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -40,6 +71,60 @@ export default function App() {
   const [view, setView] = useState('dashboard');
   const [detail, setDetail] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(60);
+
+  const timeoutRef = useRef(null);
+  const warningRef = useRef(null);
+  const countdownRef = useRef(null);
+
+  const handleLogout = useCallback(() => {
+    clearTimeout(timeoutRef.current);
+    clearTimeout(warningRef.current);
+    clearInterval(countdownRef.current);
+    setShowWarning(false);
+    signOut(auth);
+  }, []);
+
+  const resetTimer = useCallback(() => {
+    if (!user) return;
+    clearTimeout(timeoutRef.current);
+    clearTimeout(warningRef.current);
+    clearInterval(countdownRef.current);
+    setShowWarning(false);
+
+    warningRef.current = setTimeout(() => {
+      setSecondsLeft(60);
+      setShowWarning(true);
+      countdownRef.current = setInterval(() => {
+        setSecondsLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(countdownRef.current);
+            handleLogout();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }, INACTIVITY_TIMEOUT - WARNING_BEFORE);
+
+    timeoutRef.current = setTimeout(() => {
+      handleLogout();
+    }, INACTIVITY_TIMEOUT);
+  }, [user, handleLogout]);
+
+  useEffect(() => {
+    if (!user) return;
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+      clearTimeout(timeoutRef.current);
+      clearTimeout(warningRef.current);
+      clearInterval(countdownRef.current);
+    };
+  }, [user, resetTimer]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -111,6 +196,14 @@ export default function App() {
 
   return (
     <div className="app-layout">
+      {showWarning && (
+        <SessionWarning
+          secondsLeft={secondsLeft}
+          onStayLoggedIn={resetTimer}
+          onLogout={handleLogout}
+        />
+      )}
+
       <div className="sidebar">
         <div className="sidebar-logo">
           <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', letterSpacing: '1px' }}>PROTEC<span style={{ color: '#60a5fa' }}>®</span></div>
@@ -145,7 +238,7 @@ export default function App() {
           <button onClick={() => setShowChangePassword(true)} style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid #1e293b', borderRadius: 6, color: '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 6 }}>
             Change password
           </button>
-          <button className="signout-btn" onClick={() => signOut(auth)}>Sign out</button>
+          <button className="signout-btn" onClick={handleLogout}>Sign out</button>
         </div>
       </div>
 
