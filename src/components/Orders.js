@@ -29,6 +29,7 @@ export default function Orders({ detail, setDetail, goDetail, perms }) {
   useEffect(() => { if (detail === null) load(); }, [detail]);
 
   const selected = detail ? orders.find(o => o.id === detail) : null;
+  const canSeeMoney = perms?.canViewFinancials;
 
   const filtered = orders.filter(o => {
     const q = search.toLowerCase();
@@ -68,7 +69,7 @@ export default function Orders({ detail, setDetail, goDetail, perms }) {
     { key: 'customerId', label: 'Customer', type: 'select', options: customers.map(c => ({ value: c.id, label: c.name })) },
     { key: 'product', label: 'Product / unit model', type: 'text' },
     { key: 'qty', label: 'Quantity', type: 'number' },
-    { key: 'unitPrice', label: 'Unit price ($)', type: 'number' },
+    ...(canSeeMoney ? [{ key: 'unitPrice', label: 'Unit price ($)', type: 'number' }] : []),
     { key: 'date', label: 'Order date', type: 'date' },
     { key: 'status', label: 'Status', type: 'select', options: statuses.map(s => ({ value: s, label: s })) },
     { key: 'notes', label: 'Notes', type: 'textarea' },
@@ -104,11 +105,15 @@ export default function Orders({ detail, setDetail, goDetail, perms }) {
                 <div className="detail-field"><label>Order date</label><p>{selected.date || '—'}</p></div>
                 <div className="detail-field"><label>Product / model</label><p>{selected.product || '—'}</p></div>
                 <div className="detail-field"><label>Quantity</label><p>{selected.qty} unit{selected.qty > 1 ? 's' : ''}</p></div>
-                <div className="detail-field"><label>Unit price</label><p>{fmt(selected.unitPrice)}</p></div>
-                <div className="detail-field">
-                  <label>Total value</label>
-                  <p style={{ fontSize: 17, fontWeight: 700, color: '#0f172a' }}>{fmt(totalValue)}</p>
-                </div>
+                {canSeeMoney && (
+                  <>
+                    <div className="detail-field"><label>Unit price</label><p>{fmt(selected.unitPrice)}</p></div>
+                    <div className="detail-field">
+                      <label>Total value</label>
+                      <p style={{ fontSize: 17, fontWeight: 700, color: '#0f172a' }}>{fmt(totalValue)}</p>
+                    </div>
+                  </>
+                )}
               </div>
               {selected.notes && <div className="notes-box">{selected.notes}</div>}
             </div>
@@ -126,7 +131,7 @@ export default function Orders({ detail, setDetail, goDetail, perms }) {
                       <span className={`badge ${po.status}`}>{po.status}</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      <div className="info-box"><div className="info-box-label">PO cost</div><div className="info-box-value">{fmt(po.total)}</div></div>
+                      {canSeeMoney && <div className="info-box"><div className="info-box-label">PO cost</div><div className="info-box-value">{fmt(po.total)}</div></div>}
                       <div className="info-box"><div className="info-box-label">Expected delivery</div><div className="info-box-value">{po.expectedDate || '—'}</div></div>
                     </div>
                   </>
@@ -141,7 +146,7 @@ export default function Orders({ detail, setDetail, goDetail, perms }) {
                   </div>
                 )}
               </div>
-              {po && (
+              {po && canSeeMoney && (
                 <div className="card">
                   <div className="section-title">Margin preview</div>
                   <div className="margin-box">
@@ -211,7 +216,13 @@ export default function Orders({ detail, setDetail, goDetail, perms }) {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Customer</th><th>Product</th><th>Qty</th><th>Value</th><th>Date</th><th>Vendor PO</th><th>Status</th>
+                <th>Customer</th>
+                <th>Product</th>
+                <th>Qty</th>
+                {canSeeMoney && <th>Value</th>}
+                <th>Date</th>
+                <th>Vendor PO</th>
+                <th>Status</th>
                 {perms.canDelete && <th>Actions</th>}
               </tr>
             </thead>
@@ -226,7 +237,7 @@ export default function Orders({ detail, setDetail, goDetail, perms }) {
                     <td style={{ fontWeight: 600 }}>{o.customerName || '—'}</td>
                     <td style={{ color: '#64748b' }}>{o.product?.slice(0, 28)}{o.product?.length > 28 ? '...' : ''}</td>
                     <td>{o.qty}</td>
-                    <td style={{ fontWeight: 600 }}>${(Number(o.qty) * Number(o.unitPrice)).toLocaleString()}</td>
+                    {canSeeMoney && <td style={{ fontWeight: 600 }}>${(Number(o.qty) * Number(o.unitPrice)).toLocaleString()}</td>}
                     <td style={{ color: '#94a3b8', fontSize: 12 }}>{o.date || '—'}</td>
                     <td>{po ? <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 500 }}>{po.id}</span> : <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 500 }}>⚠ None</span>}</td>
                     <td><span className={`badge ${o.status}`}>{o.status}</span></td>

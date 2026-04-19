@@ -3,7 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import './Shared.css';
 
-export default function Dashboard({ goDetail }) {
+export default function Dashboard({ goDetail, perms }) {
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [pos, setPOs] = useState([]);
@@ -22,16 +22,6 @@ export default function Dashboard({ goDetail }) {
     });
   }, []);
 
-  const revenue = orders.filter(o => ['Delivered','Active'].includes(o.status)).reduce((a, o) => a + (Number(o.qty) * Number(o.unitPrice)), 0);
-  const pipeline = orders.filter(o => ['Pending','In Progress','Quoted'].includes(o.status)).reduce((a, o) => a + (Number(o.qty) * Number(o.unitPrice)), 0);
-  const openPOs = pos.filter(p => p.status !== 'Received').length;
-  const fmt = n => '$' + Number(n).toLocaleString();
-
-  const statusDot = (s) => {
-    const map = { Delivered: 'dot-green', Active: 'dot-green', 'In Progress': 'dot-blue', Ordered: 'dot-blue', Shipped: 'dot-blue', Pending: 'dot-yellow', Quoted: 'dot-yellow', Draft: 'dot-yellow', 'On Hold': 'dot-red', Inactive: 'dot-gray', Received: 'dot-green' };
-    return <span className={`status-dot ${map[s] || 'dot-gray'}`}></span>;
-  };
-
   if (loading) return (
     <div className="page">
       <div className="topbar"><h1>Dashboard</h1></div>
@@ -39,8 +29,29 @@ export default function Dashboard({ goDetail }) {
     </div>
   );
 
+  const canSeeMoney = perms?.canViewFinancials;
+  const fmt = n => '$' + Number(n).toLocaleString();
+
+  const revenue = orders.filter(o => ['Delivered','Active'].includes(o.status)).reduce((a, o) => a + Number(o.qty) * Number(o.unitPrice), 0);
+  const pipeline = orders.filter(o => ['Quoted','Pending','In Progress'].includes(o.status)).reduce((a, o) => a + Number(o.qty) * Number(o.unitPrice), 0);
+  const openPOs = pos.filter(p => p.status !== 'Received').length;
+
   const recentOrders = [...orders].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
   const pendingPOs = pos.filter(p => p.status !== 'Received').slice(0, 6);
+
+  const statusDot = (s) => {
+    const map = { Delivered: 'dot-green', Active: 'dot-green', 'In Progress': 'dot-blue', Ordered: 'dot-blue', Shipped: 'dot-blue', Pending: 'dot-yellow', Quoted: 'dot-yellow', Draft: 'dot-yellow', 'On Hold': 'dot-red', Inactive: 'dot-gray', Received: 'dot-green' };
+    return <span className={`status-dot ${map[s] || 'dot-gray'}`}></span>;
+  };
+
+  const metrics = [
+    { label: 'Active customers', val: customers.filter(c => c.status === 'Active').length, sub: `${customers.length} total accounts`, show: true },
+    { label: 'Closed revenue', val: fmt(revenue), sub: 'delivered & active orders', show: canSeeMoney },
+    { label: 'Pipeline value', val: fmt(pipeline), sub: 'quoted & in progress', show: canSeeMoney },
+    { label: 'Open vendor POs', val: openPOs, sub: 'awaiting receipt', show: true },
+    { label: 'Orders in progress', val: orders.filter(o => o.status === 'In Progress').length, sub: 'being fulfilled', show: !canSeeMoney },
+    { label: 'Quoted orders', val: orders.filter(o => o.status === 'Quoted').length, sub: 'awaiting confirmation', show: !canSeeMoney },
+  ].filter(m => m.show);
 
   return (
     <div className="page">
@@ -52,26 +63,13 @@ export default function Dashboard({ goDetail }) {
       </div>
       <div className="content">
         <div className="metric-grid">
-          <div className="metric">
-            <div className="metric-label">Active customers</div>
-            <div className="metric-val">{customers.filter(c => c.status === 'Active').length}</div>
-            <div className="metric-sub">{customers.length} total accounts</div>
-          </div>
-          <div className="metric">
-            <div className="metric-label">Closed revenue</div>
-            <div className="metric-val">{fmt(revenue)}</div>
-            <div className="metric-sub">delivered & active orders</div>
-          </div>
-          <div className="metric">
-            <div className="metric-label">Pipeline value</div>
-            <div className="metric-val">{fmt(pipeline)}</div>
-            <div className="metric-sub">{orders.filter(o => ['Pending','In Progress','Quoted'].includes(o.status)).length} open orders</div>
-          </div>
-          <div className="metric">
-            <div className="metric-label">Open vendor POs</div>
-            <div className="metric-val">{openPOs}</div>
-            <div className="metric-sub">awaiting receipt</div>
-          </div>
+          {metrics.map(m => (
+            <div key={m.label} className="metric">
+              <div className="metric-label">{m.label}</div>
+              <div className="metric-val">{m.val}</div>
+              <div className="metric-sub">{m.sub}</div>
+            </div>
+          ))}
         </div>
 
         <div className="two-col">
@@ -81,18 +79,14 @@ export default function Dashboard({ goDetail }) {
               <button className="btn" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => goDetail('orders', null)}>View all</button>
             </div>
             {recentOrders.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">📋</div>
-                <div className="empty-state-title">No orders yet</div>
-                <div>Add your first customer order to get started</div>
-              </div>
+              <div className="empty-state"><div className="empty-state-icon">📋</div><div className="empty-state-title">No orders yet</div></div>
             ) : (
               <table className="tbl">
                 <thead>
                   <tr>
                     <th>Customer</th>
                     <th>Product</th>
-                    <th>Value</th>
+                    {canSeeMoney && <th>Value</th>}
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -100,8 +94,8 @@ export default function Dashboard({ goDetail }) {
                   {recentOrders.map(o => (
                     <tr key={o.id} onClick={() => goDetail('orders', o.id)}>
                       <td style={{ fontWeight: 500 }}>{o.customerName || '—'}</td>
-                      <td style={{ color: '#64748b', fontSize: 12 }}>{o.product?.slice(0, 25)}{o.product?.length > 25 ? '...' : ''}</td>
-                      <td style={{ fontWeight: 600 }}>{fmt(Number(o.qty) * Number(o.unitPrice))}</td>
+                      <td style={{ color: '#64748b', fontSize: 12 }}>{o.product?.slice(0, 22)}{o.product?.length > 22 ? '...' : ''}</td>
+                      {canSeeMoney && <td style={{ fontWeight: 600 }}>{fmt(Number(o.qty) * Number(o.unitPrice))}</td>}
                       <td>{statusDot(o.status)}<span className={`badge ${o.status}`}>{o.status}</span></td>
                     </tr>
                   ))}
@@ -116,18 +110,14 @@ export default function Dashboard({ goDetail }) {
               <button className="btn" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => goDetail('purchase_orders', null)}>View all</button>
             </div>
             {pendingPOs.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">🚚</div>
-                <div className="empty-state-title">No open POs</div>
-                <div>All vendor orders have been received</div>
-              </div>
+              <div className="empty-state"><div className="empty-state-icon">🚚</div><div className="empty-state-title">No open POs</div></div>
             ) : (
               <table className="tbl">
                 <thead>
                   <tr>
                     <th>Vendor</th>
                     <th>Items</th>
-                    <th>Total</th>
+                    {canSeeMoney && <th>Total</th>}
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -135,8 +125,8 @@ export default function Dashboard({ goDetail }) {
                   {pendingPOs.map(p => (
                     <tr key={p.id} onClick={() => goDetail('purchase_orders', p.id)}>
                       <td style={{ fontWeight: 500 }}>{p.vendorName || '—'}</td>
-                      <td style={{ color: '#64748b', fontSize: 12 }}>{p.items?.slice(0, 25)}{p.items?.length > 25 ? '...' : ''}</td>
-                      <td style={{ fontWeight: 600 }}>{fmt(p.total)}</td>
+                      <td style={{ color: '#64748b', fontSize: 12 }}>{p.items?.slice(0, 22)}{p.items?.length > 22 ? '...' : ''}</td>
+                      {canSeeMoney && <td style={{ fontWeight: 600 }}>{fmt(p.total)}</td>}
                       <td><span className={`badge ${p.status}`}>{p.status}</span></td>
                     </tr>
                   ))}
@@ -152,7 +142,7 @@ export default function Dashboard({ goDetail }) {
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>Orders missing vendor POs</div>
               <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>
-                {orders.filter(o => o.status === 'In Progress' && !o.vendorPO).length} order(s) are in progress but have no linked purchase order. Make sure to create vendor POs to fulfill these orders.
+                {orders.filter(o => o.status === 'In Progress' && !o.vendorPO).length} order(s) are in progress but have no linked purchase order.
               </div>
             </div>
           </div>

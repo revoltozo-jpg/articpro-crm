@@ -25,10 +25,10 @@ const icons = {
 };
 
 export const ROLES = {
-  viewer:  { label: 'Viewer',  canCreate: false, canEdit: false, canDelete: false, canImport: false, canManageUsers: false, canViewReports: false },
-  sales:   { label: 'Sales',   canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false, canViewReports: false, salesOnly: true },
-  manager: { label: 'Manager', canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false, canViewReports: true },
-  admin:   { label: 'Admin',   canCreate: true,  canEdit: true,  canDelete: true,  canImport: true,  canManageUsers: true,  canViewReports: true },
+  viewer:  { label: 'Viewer',  canCreate: false, canEdit: false, canDelete: false, canImport: false, canManageUsers: false, canViewReports: false, canViewFinancials: false },
+  sales:   { label: 'Sales',   canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false, canViewReports: false, canViewFinancials: false, salesOnly: true },
+  manager: { label: 'Manager', canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false, canViewReports: true,  canViewFinancials: true },
+  admin:   { label: 'Admin',   canCreate: true,  canEdit: true,  canDelete: true,  canImport: true,  canManageUsers: true,  canViewReports: true,  canViewFinancials: true },
 };
 
 export default function App() {
@@ -55,9 +55,7 @@ export default function App() {
             const adminEmails = adminsSnap.docs.map(d => d.id);
             setUserRole(adminEmails.includes(u.email) ? 'admin' : 'viewer');
           }
-          if (found?.mustChangePassword) {
-            setMustChangePassword(true);
-          }
+          if (found?.mustChangePassword) setMustChangePassword(true);
         } catch (err) { setUserRole('viewer'); }
       }
       setAuthLoading(false);
@@ -88,12 +86,7 @@ export default function App() {
           <div style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', letterSpacing: '0.5px', marginBottom: 4 }}>PROTEC<span style={{ color: '#60a5fa' }}>®</span></div>
           <div style={{ fontSize: 11, color: '#60a5fa', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Applied Mechanical Products</div>
         </div>
-        <ChangePassword
-          forced={true}
-          onClose={(success) => {
-            if (success) setMustChangePassword(false);
-          }}
-        />
+        <ChangePassword forced={true} onClose={(success) => { if (success) setMustChangePassword(false); }} />
       </div>
     </div>
   );
@@ -114,20 +107,14 @@ export default function App() {
     ...(isAdmin ? [{ label: 'Admin', items: [{ key: 'users', label: 'User management' }] }] : []),
   ];
 
-  const roleBadgeColor = {
-    viewer: '#64748b', sales: '#1d4ed8', manager: '#0f6e56', admin: '#6d28d9'
-  };
+  const roleBadgeColor = { viewer: '#64748b', sales: '#1d4ed8', manager: '#0f6e56', admin: '#6d28d9' };
 
   return (
     <div className="app-layout">
       <div className="sidebar">
         <div className="sidebar-logo">
-          <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', letterSpacing: '1px' }}>
-            PROTEC<span style={{ color: '#60a5fa' }}>®</span>
-          </div>
-          <div style={{ fontSize: 9, color: '#60a5fa', letterSpacing: '0.18em', textTransform: 'uppercase', marginTop: 3, fontWeight: 600 }}>
-            Applied Mechanical Products
-          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#ffffff', letterSpacing: '1px' }}>PROTEC<span style={{ color: '#60a5fa' }}>®</span></div>
+          <div style={{ fontSize: 9, color: '#60a5fa', letterSpacing: '0.18em', textTransform: 'uppercase', marginTop: 3, fontWeight: 600 }}>Applied Mechanical Products</div>
           <div style={{ fontSize: 10, color: '#475569', marginTop: 6, fontWeight: 500 }}>CRM Portal</div>
         </div>
 
@@ -155,10 +142,7 @@ export default function App() {
             <div style={{ fontSize: 11, color: '#64748b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
             <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: roleBadgeColor[userRole], color: '#fff' }}>{ROLES[userRole]?.label}</span>
           </div>
-          <button
-            onClick={() => setShowChangePassword(true)}
-            style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid #1e293b', borderRadius: 6, color: '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 6 }}
-          >
+          <button onClick={() => setShowChangePassword(true)} style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid #1e293b', borderRadius: 6, color: '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 6 }}>
             Change password
           </button>
           <button className="signout-btn" onClick={() => signOut(auth)}>Sign out</button>
@@ -166,7 +150,7 @@ export default function App() {
       </div>
 
       <div className="main">
-        {view === 'dashboard' && <Dashboard goDetail={goDetail} />}
+        {view === 'dashboard' && <Dashboard goDetail={goDetail} perms={perms} />}
         {view === 'reports' && perms.canViewReports && <Reports />}
         {view === 'customers' && <Customers detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
         {view === 'orders' && <Orders detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
@@ -177,13 +161,10 @@ export default function App() {
 
       {showImport && <Import onClose={() => setShowImport(false)} />}
       {showChangePassword && (
-        <ChangePassword
-          forced={false}
-          onClose={(success) => {
-            setShowChangePassword(false);
-            if (success) alert('Password updated successfully!');
-          }}
-        />
+        <ChangePassword forced={false} onClose={(success) => {
+          setShowChangePassword(false);
+          if (success) alert('Password updated successfully!');
+        }} />
       )}
     </div>
   );
