@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import Login from './components/Login';
 import Customers from './components/Customers';
@@ -10,6 +10,7 @@ import PurchaseOrders from './components/PurchaseOrders';
 import Dashboard from './components/Dashboard';
 import Import from './components/Import';
 import Users from './components/Users';
+import Reports from './components/Reports';
 import './App.css';
 
 const icons = {
@@ -18,14 +19,15 @@ const icons = {
   orders: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   vendors: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   purchase_orders: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
+  reports: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
   users: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
 };
 
 export const ROLES = {
-  viewer:  { label: 'Viewer',  canCreate: false, canEdit: false, canDelete: false, canImport: false, canManageUsers: false },
-  sales:   { label: 'Sales',   canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false, salesOnly: true },
-  manager: { label: 'Manager', canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false },
-  admin:   { label: 'Admin',   canCreate: true,  canEdit: true,  canDelete: true,  canImport: true,  canManageUsers: true },
+  viewer:  { label: 'Viewer',  canCreate: false, canEdit: false, canDelete: false, canImport: false, canManageUsers: false, canViewReports: false },
+  sales:   { label: 'Sales',   canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false, canViewReports: false, salesOnly: true },
+  manager: { label: 'Manager', canCreate: true,  canEdit: true,  canDelete: false, canImport: false, canManageUsers: false, canViewReports: true },
+  admin:   { label: 'Admin',   canCreate: true,  canEdit: true,  canDelete: true,  canImport: true,  canManageUsers: true,  canViewReports: true },
 };
 
 export default function App() {
@@ -50,9 +52,7 @@ export default function App() {
             const adminEmails = adminsSnap.docs.map(d => d.id);
             setUserRole(adminEmails.includes(u.email) ? 'admin' : 'viewer');
           }
-        } catch (err) {
-          setUserRole('viewer');
-        }
+        } catch (err) { setUserRole('viewer'); }
       }
       setAuthLoading(false);
     });
@@ -61,7 +61,6 @@ export default function App() {
 
   const nav = (v) => { setView(v); setDetail(null); };
   const goDetail = (v, id) => { setView(v); setDetail(id); };
-
   const perms = ROLES[userRole] || ROLES.viewer;
   const isAdmin = userRole === 'admin';
 
@@ -77,7 +76,10 @@ export default function App() {
   if (!user) return <Login />;
 
   const navGroups = [
-    { label: 'Overview', items: [{ key: 'dashboard', label: 'Dashboard' }] },
+    { label: 'Overview', items: [
+      { key: 'dashboard', label: 'Dashboard' },
+      ...(perms.canViewReports ? [{ key: 'reports', label: 'Reports' }] : []),
+    ]},
     { label: 'Sales', items: [
       { key: 'customers', label: 'Customers' },
       { key: 'orders', label: 'Customer orders' },
@@ -136,6 +138,7 @@ export default function App() {
 
       <div className="main">
         {view === 'dashboard' && <Dashboard goDetail={goDetail} />}
+        {view === 'reports' && perms.canViewReports && <Reports />}
         {view === 'customers' && <Customers detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
         {view === 'orders' && <Orders detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
         {view === 'vendors' && <Vendors detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
