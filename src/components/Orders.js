@@ -11,24 +11,30 @@ export default function Orders({ detail, setDetail, goDetail }) {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({});
+  const [filterStatus, setFilterStatus] = useState('');
 
   const load = async () => {
-    const os = await getDocs(collection(db, 'orders'));
+    const [os, cs, ps] = await Promise.all([
+      getDocs(collection(db, 'orders')),
+      getDocs(collection(db, 'customers')),
+      getDocs(collection(db, 'purchase_orders')),
+    ]);
     setOrders(os.docs.map(d => ({ id: d.id, ...d.data() })));
-    const cs = await getDocs(collection(db, 'customers'));
     setCustomers(cs.docs.map(d => ({ id: d.id, ...d.data() })));
-    const ps = await getDocs(collection(db, 'purchase_orders'));
     setPOs(ps.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (detail === null) load(); }, [detail]);
 
   const selected = detail ? orders.find(o => o.id === detail) : null;
-  const filtered = orders.filter(o => !search ||
-    o.id?.toLowerCase().includes(search.toLowerCase()) ||
-    o.product?.toLowerCase().includes(search.toLowerCase()) ||
-    o.customerName?.toLowerCase().includes(search.toLowerCase())
-  );
+
+  const filtered = orders.filter(o => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || o.id?.toLowerCase().includes(q) || o.product?.toLowerCase().includes(q) || o.customerName?.toLowerCase().includes(q);
+    const matchStatus = !filterStatus || o.status === filterStatus;
+    return matchSearch && matchStatus;
+  });
 
   const openForm = (o = {}) => { setForm(o); setModal(true); };
 
@@ -39,73 +45,146 @@ export default function Orders({ detail, setDetail, goDetail }) {
     data.qty = Number(data.qty) || 1;
     data.unitPrice = Number(data.unitPrice) || 0;
     if (data.id) {
-      await updateDoc(doc(db, 'orders', data.id), data);
+      const { id, ...rest } = data;
+      await updateDoc(doc(db, 'orders', id), rest);
     } else {
-      await addDoc(collection(db, 'orders'), { ...data, status: data.status || 'Quoted' });
+      await addDoc(collection(db, 'orders'), { ...data, status: data.status || 'Quoted', vendorPO: '' });
     }
     setModal(false); load();
   };
 
+  const fmt = n => '$' + Number(n).toLocaleString();
+
   const orderFields = [
     { key: 'customerId', label: 'Customer', type: 'select', options: customers.map(c => ({ value: c.id, label: c.name })) },
-    { key: 'product', label: 'Product' },
+    { key: 'product', label: 'Product / unit model', type: 'text' },
     { key: 'qty', label: 'Quantity', type: 'number' },
     { key: 'unitPrice', label: 'Unit price ($)', type: 'number' },
-    { key: 'date', label: 'Date', type: 'date' },
-    { key: 'status', label: 'Status', type: 'select', options: ['Quoted','Pending','In Progress','Active','Delivered','On Hold'].map(o => ({ value: o, label: o })) },
+    { key: 'date', label: 'Order date', type: 'date' },
+    { key: 'status', label: 'Status', type: 'select', options: [
+      { value: 'Quoted', label: 'Quoted' },
+      { value: 'Pending', label: 'Pending' },
+      { value: 'In Progress', label: 'In Progress' },
+      { value: 'Active', label: 'Active' },
+      { value: 'Delivered', label: 'Delivered' },
+      { value: 'On Hold', label: 'On Hold' },
+    ]},
     { key: 'notes', label: 'Notes', type: 'textarea' },
   ];
 
+  const statuses = ['Quoted', 'Pending', 'In Progress', 'Active', 'Delivered', 'On Hold'];
+
   if (selected) {
     const po = pos.find(p => p.relatedSO === selected.id);
+    const vendor = po ? { name: po.vendorName } : null;
+    const totalValue = Number(selected.qty) * Number(selected.unitPrice);
+
     return (
       <div className="page">
         <div className="topbar">
-          <h1>Order detail</h1>
+          <div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 2 }}>Customer order</div>
+            <h1>{selected.id || 'Order detail'}</h1>
+          </div>
           <div className="topbar-actions">
-            <button className="btn btn-primary" onClick={() => openForm(selected)}>Edit</button>
+            <span className={`badge ${selected.status}`}>{selected.status}</span>
+            <button className="btn" onClick={() => openForm(selected)}>Edit order</button>
+            {!po && <button className="btn btn-primary" onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create vendor PO</button>}
           </div>
         </div>
         <div className="content">
           <button className="back-btn" onClick={() => setDetail(null)}>← Back to orders</button>
-          <div className="card">
-            <div className="detail-header">
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>{selected.id}</div>
-                <div style={{ fontSize: 13, color: '#6b7280' }}>{selected.date}</div>
-              </div>
-              <div style={{ flex: 1 }} />
-              <span className={`badge ${selected.status}`}>{selected.status}</span>
-            </div>
-            <div className="two-col">
-              <div>
-                <div className="section-title">Order details</div>
-                <div className="detail-grid">
-                  <div className="detail-field"><label>Customer</label><p style={{ color: '#2563eb', cursor: 'pointer' }} onClick={() => goDetail('customers', selected.customerId)}>{selected.customerName}</p></div>
-                  <div className="detail-field"><label>Product</label><p>{selected.product}</p></div>
-                  <div className="detail-field"><label>Quantity</label><p>{selected.qty} units</p></div>
-                  <div className="detail-field"><label>Unit price</label><p>${Number(selected.unitPrice).toLocaleString()}</p></div>
-                  <div className="detail-field"><label>Total</label><p style={{ fontWeight: 600, fontSize: 15 }}>${(selected.qty * selected.unitPrice).toLocaleString()}</p></div>
+          <div className="two-col" style={{ marginBottom: 20 }}>
+            <div className="card">
+              <div className="section-title">Order information</div>
+              <div className="detail-grid">
+                <div className="detail-field">
+                  <label>Customer</label>
+                  <p className="link" onClick={() => goDetail('customers', selected.customerId)}>{selected.customerName || '—'}</p>
                 </div>
-                {selected.notes && <div className="notes-box">{selected.notes}</div>}
+                <div className="detail-field"><label>Order date</label><p>{selected.date || '—'}</p></div>
+                <div className="detail-field"><label>Product / model</label><p>{selected.product || '—'}</p></div>
+                <div className="detail-field"><label>Quantity</label><p>{selected.qty} unit{selected.qty > 1 ? 's' : ''}</p></div>
+                <div className="detail-field"><label>Unit price</label><p>{fmt(selected.unitPrice)}</p></div>
+                <div className="detail-field">
+                  <label>Total value</label>
+                  <p style={{ fontSize: 17, fontWeight: 700, color: '#0f172a' }}>{fmt(totalValue)}</p>
+                </div>
               </div>
-              <div>
-                <div className="section-title">Fulfillment</div>
+              {selected.notes && <div className="notes-box">{selected.notes}</div>}
+            </div>
+
+            <div>
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div className="section-title">Fulfillment status</div>
                 {po ? (
-                  <div style={{ background: '#f9fafb', borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Linked purchase order</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#2563eb', cursor: 'pointer' }} onClick={() => goDetail('purchase_orders', po.id)}>{po.id}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{po.vendorName}</div>
-                    <div style={{ marginTop: 8 }}><span className={`badge ${po.status}`}>{po.status}</span></div>
-                    {po.expectedDate && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Expected: {po.expectedDate}</div>}
-                  </div>
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                      <div>
+                        <div className="info-box-label">Purchase order</div>
+                        <div className="link" style={{ fontSize: 15, fontWeight: 700 }} onClick={() => goDetail('purchase_orders', po.id)}>{po.id}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>{po.vendorName}</div>
+                      </div>
+                      <span className={`badge ${po.status}`}>{po.status}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div className="info-box">
+                        <div className="info-box-label">PO cost</div>
+                        <div className="info-box-value">{fmt(po.total)}</div>
+                      </div>
+                      <div className="info-box">
+                        <div className="info-box-label">Expected delivery</div>
+                        <div className="info-box-value">{po.expectedDate || '—'}</div>
+                      </div>
+                    </div>
+                  </>
                 ) : (
-                  <div style={{ background: '#f9fafb', borderRadius: 8, padding: 14, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
-                    No purchase order yet<br />
-                    <button className="btn" style={{ marginTop: 10 }} onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create PO</button>
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>📦</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>No vendor PO yet</div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>Create a purchase order to start fulfilling this order</div>
+                    <button className="btn btn-primary" onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create vendor PO</button>
                   </div>
                 )}
               </div>
+
+              {po && (
+                <div className="card">
+                  <div className="section-title">Margin preview</div>
+                  <div className="margin-box">
+                    <div className="margin-row"><span>Customer order value</span><span style={{ fontWeight: 600, color: '#0f172a' }}>{fmt(totalValue)}</span></div>
+                    <div className="margin-row"><span>Vendor PO cost</span><span style={{ fontWeight: 600, color: '#0f172a' }}>{fmt(po.total)}</span></div>
+                    <div className="margin-row">
+                      <span>Gross margin</span>
+                      <span className="margin-positive">{fmt(totalValue - po.total)} ({Math.round((totalValue - po.total) / totalValue * 100)}%)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="section-title">Order timeline</div>
+            <div style={{ display: 'flex', gap: 0 }}>
+              {[
+                { label: 'Quoted', done: true },
+                { label: 'Confirmed', done: ['Pending','In Progress','Active','Delivered'].includes(selected.status) },
+                { label: 'PO issued', done: !!po },
+                { label: 'Shipped', done: po && ['Shipped','Received'].includes(po.status) },
+                { label: 'Delivered', done: selected.status === 'Delivered' },
+              ].map((step, i, arr) => (
+                <div key={step.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                    {i > 0 && <div style={{ flex: 1, height: 2, background: step.done ? '#22c55e' : '#e2e8f0' }}></div>}
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: step.done ? '#22c55e' : '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: step.done ? '#fff' : '#94a3b8', fontWeight: 700, flexShrink: 0 }}>
+                      {step.done ? '✓' : i + 1}
+                    </div>
+                    {i < arr.length - 1 && <div style={{ flex: 1, height: 2, background: arr[i + 1].done ? '#22c55e' : '#e2e8f0' }}></div>}
+                  </div>
+                  <div style={{ fontSize: 11, color: step.done ? '#15803d' : '#94a3b8', marginTop: 6, fontWeight: step.done ? 600 : 400 }}>{step.label}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -119,30 +198,74 @@ export default function Orders({ detail, setDetail, goDetail }) {
       <div className="topbar">
         <h1>Customer orders</h1>
         <div className="topbar-actions">
-          <input className="search" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="search" placeholder="Search orders..." value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="search" style={{ width: 140 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All statuses</option>
+            {statuses.map(s => <option key={s}>{s}</option>)}
+          </select>
           <button className="btn btn-primary" onClick={() => openForm()}>+ New order</button>
         </div>
       </div>
       <div className="content">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+          {[
+            { label: 'Total orders', val: orders.length },
+            { label: 'Quoted', val: orders.filter(o => o.status === 'Quoted').length },
+            { label: 'In progress', val: orders.filter(o => o.status === 'In Progress').length },
+            { label: 'No vendor PO', val: orders.filter(o => ['Pending','In Progress'].includes(o.status) && !o.vendorPO).length },
+          ].map(m => (
+            <div key={m.label} className="metric">
+              <div className="metric-label">{m.label}</div>
+              <div className="metric-val">{m.val}</div>
+            </div>
+          ))}
+        </div>
         <div className="card">
           <table className="tbl">
-            <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Total</th><th>Status</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Value</th>
+                <th>Date</th>
+                <th>Vendor PO</th>
+                <th>Status</th>
+              </tr>
+            </thead>
             <tbody>
-              {filtered.map(o => (
-                <tr key={o.id} onClick={() => setDetail(o.id)}>
-                  <td style={{ color: '#6b7280' }}>{o.id}</td>
-                  <td style={{ fontWeight: 500 }}>{o.customerName}</td>
-                  <td>{o.product}</td>
-                  <td>{o.qty}</td>
-                  <td>${(o.qty * o.unitPrice).toLocaleString()}</td>
-                  <td><span className={`badge ${o.status}`}>{o.status}</span></td>
-                </tr>
-              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan="7">
+                  <div className="empty-state">
+                    <div className="empty-state-icon">📋</div>
+                    <div className="empty-state-title">No orders found</div>
+                  </div>
+                </td></tr>
+              )}
+              {filtered.map(o => {
+                const po = pos.find(p => p.relatedSO === o.id);
+                return (
+                  <tr key={o.id} onClick={() => setDetail(o.id)}>
+                    <td style={{ fontWeight: 600 }}>{o.customerName || '—'}</td>
+                    <td style={{ color: '#64748b' }}>{o.product?.slice(0, 28)}{o.product?.length > 28 ? '...' : ''}</td>
+                    <td>{o.qty}</td>
+                    <td style={{ fontWeight: 600 }}>${(Number(o.qty) * Number(o.unitPrice)).toLocaleString()}</td>
+                    <td style={{ color: '#94a3b8', fontSize: 12 }}>{o.date || '—'}</td>
+                    <td>
+                      {po
+                        ? <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 500 }}>{po.id}</span>
+                        : <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 500 }}>⚠ None</span>
+                      }
+                    </td>
+                    <td><span className={`badge ${o.status}`}>{o.status}</span></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
-      {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New order" fields={orderFields} />}
+      {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New customer order" fields={orderFields} />}
     </div>
   );
 }

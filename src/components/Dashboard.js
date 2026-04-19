@@ -7,58 +7,156 @@ export default function Dashboard({ goDetail }) {
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [pos, setPOs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDocs(collection(db, 'customers')).then(s => setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    getDocs(collection(db, 'orders')).then(s => setOrders(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    getDocs(collection(db, 'purchase_orders')).then(s => setPOs(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    Promise.all([
+      getDocs(collection(db, 'customers')),
+      getDocs(collection(db, 'orders')),
+      getDocs(collection(db, 'purchase_orders')),
+    ]).then(([cs, os, ps]) => {
+      setCustomers(cs.docs.map(d => ({ id: d.id, ...d.data() })));
+      setOrders(os.docs.map(d => ({ id: d.id, ...d.data() })));
+      setPOs(ps.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
   }, []);
 
-  const revenue = orders.filter(o => ['Delivered','Active'].includes(o.status)).reduce((a, o) => a + (o.qty * o.unitPrice), 0);
-  const pipeline = orders.filter(o => ['Pending','In Progress','Quoted'].includes(o.status)).reduce((a, o) => a + (o.qty * o.unitPrice), 0);
+  const revenue = orders.filter(o => ['Delivered','Active'].includes(o.status)).reduce((a, o) => a + (Number(o.qty) * Number(o.unitPrice)), 0);
+  const pipeline = orders.filter(o => ['Pending','In Progress','Quoted'].includes(o.status)).reduce((a, o) => a + (Number(o.qty) * Number(o.unitPrice)), 0);
   const openPOs = pos.filter(p => p.status !== 'Received').length;
   const fmt = n => '$' + Number(n).toLocaleString();
 
-  return (
+  const statusDot = (s) => {
+    const map = { Delivered: 'dot-green', Active: 'dot-green', 'In Progress': 'dot-blue', Ordered: 'dot-blue', Shipped: 'dot-blue', Pending: 'dot-yellow', Quoted: 'dot-yellow', Draft: 'dot-yellow', 'On Hold': 'dot-red', Inactive: 'dot-gray', Received: 'dot-green' };
+    return <span className={`status-dot ${map[s] || 'dot-gray'}`}></span>;
+  };
+
+  if (loading) return (
     <div className="page">
       <div className="topbar"><h1>Dashboard</h1></div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13 }}>Loading...</div>
+    </div>
+  );
+
+  const recentOrders = [...orders].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
+  const pendingPOs = pos.filter(p => p.status !== 'Received').slice(0, 6);
+
+  return (
+    <div className="page">
+      <div className="topbar">
+        <h1>Dashboard</h1>
+        <div style={{ fontSize: 12, color: '#94a3b8' }}>
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </div>
+      </div>
       <div className="content">
         <div className="metric-grid">
-          <div className="metric"><div className="metric-label">Active customers</div><div className="metric-val">{customers.filter(c => c.status === 'Active').length}</div></div>
-          <div className="metric"><div className="metric-label">Revenue closed</div><div className="metric-val">{fmt(revenue)}</div></div>
-          <div className="metric"><div className="metric-label">Pipeline value</div><div className="metric-val">{fmt(pipeline)}</div></div>
-          <div className="metric"><div className="metric-label">Open POs</div><div className="metric-val">{openPOs}</div></div>
+          <div className="metric">
+            <div className="metric-label">Active customers</div>
+            <div className="metric-val">{customers.filter(c => c.status === 'Active').length}</div>
+            <div className="metric-sub">{customers.length} total accounts</div>
+          </div>
+          <div className="metric">
+            <div className="metric-label">Closed revenue</div>
+            <div className="metric-val">{fmt(revenue)}</div>
+            <div className="metric-sub">delivered & active orders</div>
+          </div>
+          <div className="metric">
+            <div className="metric-label">Pipeline value</div>
+            <div className="metric-val">{fmt(pipeline)}</div>
+            <div className="metric-sub">{orders.filter(o => ['Pending','In Progress','Quoted'].includes(o.status)).length} open orders</div>
+          </div>
+          <div className="metric">
+            <div className="metric-label">Open vendor POs</div>
+            <div className="metric-val">{openPOs}</div>
+            <div className="metric-sub">awaiting receipt</div>
+          </div>
         </div>
+
         <div className="two-col">
           <div className="card">
-            <div className="section-title">Recent orders</div>
-            <table className="tbl">
-              <thead><tr><th>Order</th><th>Customer</th><th>Status</th></tr></thead>
-              <tbody>
-                {orders.slice(0, 5).map(o => (
-                  <tr key={o.id} onClick={() => goDetail('orders', o.id)}>
-                    <td>{o.id}</td><td>{o.customerName}</td>
-                    <td><span className={`badge ${o.status}`}>{o.status}</span></td>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div className="section-title" style={{ margin: 0 }}>Recent customer orders</div>
+              <button className="btn" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => goDetail('orders', null)}>View all</button>
+            </div>
+            {recentOrders.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon">📋</div>
+                <div className="empty-state-title">No orders yet</div>
+                <div>Add your first customer order to get started</div>
+              </div>
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Product</th>
+                    <th>Value</th>
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {recentOrders.map(o => (
+                    <tr key={o.id} onClick={() => goDetail('orders', o.id)}>
+                      <td style={{ fontWeight: 500 }}>{o.customerName || '—'}</td>
+                      <td style={{ color: '#64748b', fontSize: 12 }}>{o.product?.slice(0, 25)}{o.product?.length > 25 ? '...' : ''}</td>
+                      <td style={{ fontWeight: 600 }}>{fmt(Number(o.qty) * Number(o.unitPrice))}</td>
+                      <td>{statusDot(o.status)}<span className={`badge ${o.status}`}>{o.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
+
           <div className="card">
-            <div className="section-title">Purchase orders</div>
-            <table className="tbl">
-              <thead><tr><th>PO</th><th>Vendor</th><th>Status</th></tr></thead>
-              <tbody>
-                {pos.slice(0, 5).map(p => (
-                  <tr key={p.id} onClick={() => goDetail('purchase_orders', p.id)}>
-                    <td>{p.id}</td><td>{p.vendorName}</td>
-                    <td><span className={`badge ${p.status}`}>{p.status}</span></td>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div className="section-title" style={{ margin: 0 }}>Open vendor POs</div>
+              <button className="btn" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => goDetail('purchase_orders', null)}>View all</button>
+            </div>
+            {pendingPOs.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state-icon">🚚</div>
+                <div className="empty-state-title">No open POs</div>
+                <div>All vendor orders have been received</div>
+              </div>
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Vendor</th>
+                    <th>Items</th>
+                    <th>Total</th>
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pendingPOs.map(p => (
+                    <tr key={p.id} onClick={() => goDetail('purchase_orders', p.id)}>
+                      <td style={{ fontWeight: 500 }}>{p.vendorName || '—'}</td>
+                      <td style={{ color: '#64748b', fontSize: 12 }}>{p.items?.slice(0, 25)}{p.items?.length > 25 ? '...' : ''}</td>
+                      <td style={{ fontWeight: 600 }}>{fmt(p.total)}</td>
+                      <td><span className={`badge ${p.status}`}>{p.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
+
+        {orders.filter(o => o.status === 'In Progress' && !o.vendorPO).length > 0 && (
+          <div style={{ marginTop: 20, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 18 }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>Orders missing vendor POs</div>
+              <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>
+                {orders.filter(o => o.status === 'In Progress' && !o.vendorPO).length} order(s) are in progress but have no linked purchase order. Make sure to create vendor POs to fulfill these orders.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

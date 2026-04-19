@@ -20,19 +20,38 @@ export default function Customers({ detail, setDetail }) {
   useEffect(() => { load(); }, []);
 
   const selected = detail ? customers.find(c => c.id === detail) : null;
-  const filtered = customers.filter(c => !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.contact?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = customers.filter(c => !search ||
+    c.name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.contact?.toLowerCase().includes(search.toLowerCase())
+  );
 
   const openForm = (c = {}) => { setForm(c); setModal(true); };
 
   const save = async () => {
     const data = { ...form };
     if (data.id) {
-      await updateDoc(doc(db, 'customers', data.id), data);
+      const { id, ...rest } = data;
+      await updateDoc(doc(db, 'customers', id), rest);
     } else {
       await addDoc(collection(db, 'customers'), { ...data, status: data.status || 'Active' });
     }
     setModal(false); load();
   };
+
+  const customerFields = [
+    { key: 'name', label: 'Company name', type: 'text' },
+    { key: 'contact', label: 'Contact person', type: 'text' },
+    { key: 'email', label: 'Email', type: 'email' },
+    { key: 'phone', label: 'Phone', type: 'text' },
+    { key: 'address', label: 'Address', type: 'text' },
+    { key: 'industry', label: 'Industry', type: 'text' },
+    { key: 'units', label: 'AC units', type: 'number' },
+    { key: 'status', label: 'Status', type: 'select', options: [
+      { value: 'Active', label: 'Active' },
+      { value: 'Inactive', label: 'Inactive' }
+    ]},
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ];
 
   if (selected) return (
     <div className="page">
@@ -66,8 +85,16 @@ export default function Customers({ detail, setDetail }) {
               <thead><tr><th>Order</th><th>Product</th><th>Total</th><th>Status</th></tr></thead>
               <tbody>
                 {orders.filter(o => o.customerId === selected.id).map(o => (
-                  <tr key={o.id}><td>{o.id}</td><td>{o.product}</td><td>${(o.qty * o.unitPrice).toLocaleString()}</td><td><span className={`badge ${o.status}`}>{o.status}</span></td></tr>
+                  <tr key={o.id}>
+                    <td>{o.id}</td>
+                    <td>{o.product}</td>
+                    <td>${(o.qty * o.unitPrice).toLocaleString()}</td>
+                    <td><span className={`badge ${o.status}`}>{o.status}</span></td>
+                  </tr>
                 ))}
+                {orders.filter(o => o.customerId === selected.id).length === 0 && (
+                  <tr><td colSpan="4" style={{ textAlign: 'center', padding: 20, color: '#6b7280' }}>No orders yet</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -91,10 +118,15 @@ export default function Customers({ detail, setDetail }) {
           <table className="tbl">
             <thead><tr><th>Company</th><th>Contact</th><th>Industry</th><th>Units</th><th>Status</th></tr></thead>
             <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan="5" style={{ textAlign: 'center', padding: 30, color: '#6b7280' }}>No customers yet — add your first one!</td></tr>
+              )}
               {filtered.map(c => (
                 <tr key={c.id} onClick={() => setDetail(c.id)}>
                   <td style={{ fontWeight: 500 }}>{c.name}</td>
-                  <td>{c.contact}</td><td>{c.industry}</td><td>{c.units}</td>
+                  <td>{c.contact}</td>
+                  <td>{c.industry}</td>
+                  <td>{c.units}</td>
                   <td><span className={`badge ${c.status}`}>{c.status}</span></td>
                 </tr>
               ))}
@@ -102,22 +134,10 @@ export default function Customers({ detail, setDetail }) {
           </table>
         </div>
       </div>
-      {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title={form.id ? 'Edit customer' : 'New customer'} fields={customerFields} />}
+      {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New customer" fields={customerFields} />}
     </div>
   );
 }
-
-const customerFields = [
-  { key: 'name', label: 'Company name' },
-  { key: 'contact', label: 'Contact person' },
-  { key: 'email', label: 'Email', type: 'email' },
-  { key: 'phone', label: 'Phone' },
-  { key: 'address', label: 'Address' },
-  { key: 'industry', label: 'Industry' },
-  { key: 'units', label: 'AC units', type: 'number' },
-  { key: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] },
-  { key: 'notes', label: 'Notes', type: 'textarea' },
-];
 
 export function Modal({ form, setForm, save, close, title, fields }) {
   return (
@@ -133,7 +153,7 @@ export function Modal({ form, setForm, save, close, title, fields }) {
             {f.type === 'select' ? (
               <select value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })}>
                 <option value="">Select...</option>
-                {f.options.map(o => <option key={o}>{o}</option>)}
+                {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             ) : f.type === 'textarea' ? (
               <textarea value={form[f.key] || ''} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
