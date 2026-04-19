@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Modal } from './Customers';
+import { Modal, DeleteModal } from './Customers';
 import './Shared.css';
 
-export default function Vendors({ detail, setDetail, goDetail }) {
+export default function Vendors({ detail, setDetail, goDetail, isAdmin }) {
   const [vendors, setVendors] = useState([]);
   const [pos, setPOs] = useState([]);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({});
 
   const load = async () => {
@@ -39,6 +40,13 @@ export default function Vendors({ detail, setDetail, goDetail }) {
     setModal(false); load();
   };
 
+  const deleteRecord = async (v) => {
+    await deleteDoc(doc(db, 'vendors', v.id));
+    setDeleteConfirm(null);
+    setDetail(null);
+    load();
+  };
+
   const vendorFields = [
     { key: 'name', label: 'Vendor name', type: 'text' },
     { key: 'contact', label: 'Contact person', type: 'text' },
@@ -63,7 +71,8 @@ export default function Vendors({ detail, setDetail, goDetail }) {
         </div>
         <div className="topbar-actions">
           <span className={`badge ${selected.status}`}>{selected.status}</span>
-          <button className="btn btn-primary" onClick={() => openForm(selected)}>Edit vendor</button>
+          <button className="btn" onClick={() => openForm(selected)}>Edit vendor</button>
+          {isAdmin && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
         </div>
       </div>
       <div className="content">
@@ -81,7 +90,6 @@ export default function Vendors({ detail, setDetail, goDetail }) {
             </div>
             {selected.notes && <div className="notes-box">{selected.notes}</div>}
           </div>
-
           <div className="card">
             <div className="section-title">Purchase order summary</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
@@ -104,7 +112,6 @@ export default function Vendors({ detail, setDetail, goDetail }) {
             </div>
           </div>
         </div>
-
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div className="section-title" style={{ margin: 0 }}>Purchase orders</div>
@@ -112,14 +119,7 @@ export default function Vendors({ detail, setDetail, goDetail }) {
           </div>
           <table className="tbl">
             <thead>
-              <tr>
-                <th>PO</th>
-                <th>Linked order</th>
-                <th>Items</th>
-                <th>Total</th>
-                <th>Expected</th>
-                <th>Status</th>
-              </tr>
+              <tr><th>PO</th><th>Linked order</th><th>Items</th><th>Total</th><th>Expected</th><th>Status</th></tr>
             </thead>
             <tbody>
               {pos.filter(p => p.vendorId === selected.id).length === 0 && (
@@ -145,6 +145,7 @@ export default function Vendors({ detail, setDetail, goDetail }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="Edit vendor" fields={vendorFields} />}
+      {deleteConfirm && <DeleteModal title="Delete vendor" message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 
@@ -175,21 +176,16 @@ export default function Vendors({ detail, setDetail, goDetail }) {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Vendor</th>
-                <th>Contact</th>
-                <th>Email</th>
-                <th>Territory</th>
-                <th>Lead time</th>
-                <th>Status</th>
+                <th>Vendor</th><th>Contact</th><th>Email</th><th>Territory</th><th>Lead time</th><th>Status</th>
+                {isAdmin && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan="6">
+                <tr><td colSpan="7">
                   <div className="empty-state">
                     <div className="empty-state-icon">🏭</div>
                     <div className="empty-state-title">No vendors yet</div>
-                    <div>Add your AC unit suppliers to get started</div>
                   </div>
                 </td></tr>
               )}
@@ -201,6 +197,11 @@ export default function Vendors({ detail, setDetail, goDetail }) {
                   <td style={{ color: '#64748b' }}>{v.territory}</td>
                   <td style={{ color: '#64748b' }}>{v.leadTime}</td>
                   <td><span className={`badge ${v.status}`}>{v.status}</span></td>
+                  {isAdmin && (
+                    <td onClick={e => e.stopPropagation()}>
+                      <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(v)}>Delete</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -208,6 +209,7 @@ export default function Vendors({ detail, setDetail, goDetail }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New vendor" fields={vendorFields} />}
+      {deleteConfirm && <DeleteModal title="Delete vendor" message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 }

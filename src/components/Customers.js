@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import './Shared.css';
 
-export default function Customers({ detail, setDetail }) {
+export default function Customers({ detail, setDetail, goDetail, isAdmin }) {
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({});
 
   const load = async () => {
@@ -38,6 +39,13 @@ export default function Customers({ detail, setDetail }) {
     setModal(false); load();
   };
 
+  const deleteRecord = async (c) => {
+    await deleteDoc(doc(db, 'customers', c.id));
+    setDeleteConfirm(null);
+    setDetail(null);
+    load();
+  };
+
   const customerFields = [
     { key: 'name', label: 'Company name', type: 'text' },
     { key: 'contact', label: 'Contact person', type: 'text' },
@@ -56,9 +64,18 @@ export default function Customers({ detail, setDetail }) {
   if (selected) return (
     <div className="page">
       <div className="topbar">
-        <h1>Customer profile</h1>
+        <div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 2 }}>Customer profile</div>
+          <h1>{selected.name}</h1>
+        </div>
         <div className="topbar-actions">
-          <button className="btn btn-primary" onClick={() => openForm(selected)}>Edit</button>
+          <span className={`badge ${selected.status}`}>{selected.status}</span>
+          <button className="btn" onClick={() => openForm(selected)}>Edit</button>
+          {isAdmin && (
+            <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>
+              Delete
+            </button>
+          )}
         </div>
       </div>
       <div className="content">
@@ -70,7 +87,6 @@ export default function Customers({ detail, setDetail }) {
               <div style={{ fontSize: 16, fontWeight: 600 }}>{selected.name}</div>
               <div style={{ fontSize: 13, color: '#6b7280' }}>{selected.industry} • {selected.units} AC units</div>
             </div>
-            <span className={`badge ${selected.status}`}>{selected.status}</span>
           </div>
           <div className="detail-grid">
             <div className="detail-field"><label>Contact</label><p>{selected.contact}</p></div>
@@ -85,7 +101,7 @@ export default function Customers({ detail, setDetail }) {
               <thead><tr><th>Order</th><th>Product</th><th>Total</th><th>Status</th></tr></thead>
               <tbody>
                 {orders.filter(o => o.customerId === selected.id).map(o => (
-                  <tr key={o.id}>
+                  <tr key={o.id} onClick={() => goDetail('orders', o.id)}>
                     <td>{o.id}</td>
                     <td>{o.product}</td>
                     <td>${(o.qty * o.unitPrice).toLocaleString()}</td>
@@ -101,6 +117,14 @@ export default function Customers({ detail, setDetail }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="Edit customer" fields={customerFields} />}
+      {deleteConfirm && (
+        <DeleteModal
+          title="Delete customer"
+          message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`}
+          onConfirm={() => deleteRecord(deleteConfirm)}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
     </div>
   );
 
@@ -116,10 +140,10 @@ export default function Customers({ detail, setDetail }) {
       <div className="content">
         <div className="card">
           <table className="tbl">
-            <thead><tr><th>Company</th><th>Contact</th><th>Industry</th><th>Units</th><th>Status</th></tr></thead>
+            <thead><tr><th>Company</th><th>Contact</th><th>Industry</th><th>Units</th><th>Status</th>{isAdmin && <th>Actions</th>}</tr></thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan="5" style={{ textAlign: 'center', padding: 30, color: '#6b7280' }}>No customers yet — add your first one!</td></tr>
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: 30, color: '#6b7280' }}>No customers yet</td></tr>
               )}
               {filtered.map(c => (
                 <tr key={c.id} onClick={() => setDetail(c.id)}>
@@ -128,6 +152,11 @@ export default function Customers({ detail, setDetail }) {
                   <td>{c.industry}</td>
                   <td>{c.units}</td>
                   <td><span className={`badge ${c.status}`}>{c.status}</span></td>
+                  {isAdmin && (
+                    <td onClick={e => e.stopPropagation()}>
+                      <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(c)}>Delete</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -135,6 +164,32 @@ export default function Customers({ detail, setDetail }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New customer" fields={customerFields} />}
+      {deleteConfirm && (
+        <DeleteModal
+          title="Delete customer"
+          message={`Are you sure you want to delete ${deleteConfirm.name}? This cannot be undone.`}
+          onConfirm={() => deleteRecord(deleteConfirm)}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+export function DeleteModal({ title, message, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ width: 420 }}>
+        <div className="modal-header">
+          <h3>{title}</h3>
+          <button className="close-btn" onClick={onCancel}>×</button>
+        </div>
+        <p style={{ fontSize: 13, color: '#64748b', marginBottom: 24, lineHeight: 1.6 }}>{message}</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn" style={{ background: '#ef4444', color: '#fff', borderColor: '#ef4444' }} onClick={onConfirm}>Delete</button>
+        </div>
+      </div>
     </div>
   );
 }

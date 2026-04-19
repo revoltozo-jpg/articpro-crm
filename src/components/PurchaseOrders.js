@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Modal } from './Customers';
+import { Modal, DeleteModal } from './Customers';
 import './Shared.css';
 
-export default function PurchaseOrders({ detail, setDetail, goDetail }) {
+export default function PurchaseOrders({ detail, setDetail, goDetail, isAdmin }) {
   const [pos, setPOs] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({});
   const [filterStatus, setFilterStatus] = useState('');
 
@@ -28,9 +29,15 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
 
   useEffect(() => {
     if (detail?.startsWith('new:')) {
-      const soId = detail.split(':')[1];
-      const so = orders.find(o => o.id === soId);
-      setForm({ relatedSO: soId, items: so ? so.product + ' x' + so.qty : '', status: 'Draft' });
+      const parts = detail.split(':');
+      if (parts[1] === 'vendor') {
+        const vendorId = parts[2];
+        setForm({ vendorId, status: 'Draft' });
+      } else {
+        const soId = parts[1];
+        const so = orders.find(o => o.id === soId);
+        setForm({ relatedSO: soId, items: so ? so.product + ' x' + so.qty : '', status: 'Draft' });
+      }
       setModal(true);
       setDetail(null);
     }
@@ -63,6 +70,16 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
       }
     }
     setModal(false); load();
+  };
+
+  const deleteRecord = async (p) => {
+    await deleteDoc(doc(db, 'purchase_orders', p.id));
+    if (p.relatedSO) {
+      await updateDoc(doc(db, 'orders', p.relatedSO), { vendorPO: '' });
+    }
+    setDeleteConfirm(null);
+    setDetail(null);
+    load();
   };
 
   const fmt = n => '$' + Number(n).toLocaleString();
@@ -98,6 +115,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
           <div className="topbar-actions">
             <span className={`badge ${selected.status}`}>{selected.status}</span>
             <button className="btn" onClick={() => { setForm(selected); setModal(true); }}>Edit PO</button>
+            {isAdmin && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
           </div>
         </div>
         <div className="content">
@@ -119,7 +137,6 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
                 <div className="detail-field"><label>Order date</label><p>{selected.orderDate || '—'}</p></div>
                 <div className="detail-field"><label>Expected delivery</label><p>{selected.expectedDate || '—'}</p></div>
               </div>
-
               <div className="section-title" style={{ marginTop: 8 }}>Delivery timeline</div>
               <div style={{ display: 'flex', gap: 0 }}>
                 {[
@@ -141,7 +158,6 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
                 ))}
               </div>
             </div>
-
             <div>
               <div className="card" style={{ marginBottom: 16 }}>
                 <div className="section-title">Linked customer order</div>
@@ -173,7 +189,6 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
                   </div>
                 )}
               </div>
-
               {so && (
                 <div className="card">
                   <div className="section-title">Margin preview</div>
@@ -191,6 +206,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
           </div>
         </div>
         {modal && <Modal form={form} setForm={setForm} save={save} close={() => { setModal(false); setForm({}); }} title="Edit purchase order" fields={poFields} />}
+        {deleteConfirm && <DeleteModal title="Delete purchase order" message={`Are you sure you want to delete ${deleteConfirm.id}? The linked customer order will be unlinked. This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
       </div>
     );
   }
@@ -233,11 +249,12 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
                 <th>Total cost</th>
                 <th>Expected</th>
                 <th>Status</th>
+                {isAdmin && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan="7">
+                <tr><td colSpan="8">
                   <div className="empty-state">
                     <div className="empty-state-icon">🚚</div>
                     <div className="empty-state-title">No purchase orders found</div>
@@ -260,6 +277,11 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
                     <td style={{ fontWeight: 600 }}>{fmt(p.total)}</td>
                     <td style={{ color: '#94a3b8', fontSize: 12 }}>{p.expectedDate || '—'}</td>
                     <td><span className={`badge ${p.status}`}>{p.status}</span></td>
+                    {isAdmin && (
+                      <td onClick={e => e.stopPropagation()}>
+                        <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(p)}>Delete</button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -268,6 +290,7 @@ export default function PurchaseOrders({ detail, setDetail, goDetail }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => { setModal(false); setForm({}); }} title="New purchase order" fields={poFields} />}
+      {deleteConfirm && <DeleteModal title="Delete purchase order" message={`Are you sure you want to delete ${deleteConfirm.id}? The linked customer order will be unlinked. This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 }

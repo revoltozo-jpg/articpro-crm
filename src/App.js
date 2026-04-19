@@ -121,10 +121,10 @@ export default function App() {
 
       <div className="main">
         {view === 'dashboard' && <Dashboard goDetail={goDetail} />}
-        {view === 'customers' && <Customers detail={detail} setDetail={setDetail} goDetail={goDetail} />}
-        {view === 'orders' && <Orders detail={detail} setDetail={setDetail} goDetail={goDetail} />}
-        {view === 'vendors' && <Vendors detail={detail} setDetail={setDetail} goDetail={goDetail} />}
-        {view === 'purchase_orders' && <PurchaseOrders detail={detail} setDetail={setDetail} goDetail={goDetail} />}
+        {view === 'customers' && <Customers detail={detail} setDetail={setDetail} goDetail={goDetail} isAdmin={isAdmin} />}
+        {view === 'orders' && <Orders detail={detail} setDetail={setDetail} goDetail={goDetail} isAdmin={isAdmin} />}
+        {view === 'vendors' && <Vendors detail={detail} setDetail={setDetail} goDetail={goDetail} isAdmin={isAdmin} />}
+        {view === 'purchase_orders' && <PurchaseOrders detail={detail} setDetail={setDetail} goDetail={goDetail} isAdmin={isAdmin} />}
         {view === 'users' && isAdmin && <Users />}
       </div>
 

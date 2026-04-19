@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Modal } from './Customers';
+import { Modal, DeleteModal } from './Customers';
 import './Shared.css';
 
-export default function Orders({ detail, setDetail, goDetail }) {
+export default function Orders({ detail, setDetail, goDetail, isAdmin }) {
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [pos, setPOs] = useState([]);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [form, setForm] = useState({});
   const [filterStatus, setFilterStatus] = useState('');
 
@@ -53,6 +54,13 @@ export default function Orders({ detail, setDetail, goDetail }) {
     setModal(false); load();
   };
 
+  const deleteRecord = async (o) => {
+    await deleteDoc(doc(db, 'orders', o.id));
+    setDeleteConfirm(null);
+    setDetail(null);
+    load();
+  };
+
   const fmt = n => '$' + Number(n).toLocaleString();
 
   const orderFields = [
@@ -76,7 +84,6 @@ export default function Orders({ detail, setDetail, goDetail }) {
 
   if (selected) {
     const po = pos.find(p => p.relatedSO === selected.id);
-    const vendor = po ? { name: po.vendorName } : null;
     const totalValue = Number(selected.qty) * Number(selected.unitPrice);
 
     return (
@@ -90,6 +97,7 @@ export default function Orders({ detail, setDetail, goDetail }) {
             <span className={`badge ${selected.status}`}>{selected.status}</span>
             <button className="btn" onClick={() => openForm(selected)}>Edit order</button>
             {!po && <button className="btn btn-primary" onClick={() => goDetail('purchase_orders', 'new:' + selected.id)}>+ Create vendor PO</button>}
+            {isAdmin && <button className="btn" style={{ color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(selected)}>Delete</button>}
           </div>
         </div>
         <div className="content">
@@ -113,7 +121,6 @@ export default function Orders({ detail, setDetail, goDetail }) {
               </div>
               {selected.notes && <div className="notes-box">{selected.notes}</div>}
             </div>
-
             <div>
               <div className="card" style={{ marginBottom: 16 }}>
                 <div className="section-title">Fulfillment status</div>
@@ -147,7 +154,6 @@ export default function Orders({ detail, setDetail, goDetail }) {
                   </div>
                 )}
               </div>
-
               {po && (
                 <div className="card">
                   <div className="section-title">Margin preview</div>
@@ -163,7 +169,6 @@ export default function Orders({ detail, setDetail, goDetail }) {
               )}
             </div>
           </div>
-
           <div className="card">
             <div className="section-title">Order timeline</div>
             <div style={{ display: 'flex', gap: 0 }}>
@@ -189,6 +194,7 @@ export default function Orders({ detail, setDetail, goDetail }) {
           </div>
         </div>
         {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="Edit order" fields={orderFields} />}
+        {deleteConfirm && <DeleteModal title="Delete order" message={`Are you sure you want to delete order ${deleteConfirm.id}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
       </div>
     );
   }
@@ -231,11 +237,12 @@ export default function Orders({ detail, setDetail, goDetail }) {
                 <th>Date</th>
                 <th>Vendor PO</th>
                 <th>Status</th>
+                {isAdmin && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan="7">
+                <tr><td colSpan="8">
                   <div className="empty-state">
                     <div className="empty-state-icon">📋</div>
                     <div className="empty-state-title">No orders found</div>
@@ -258,6 +265,11 @@ export default function Orders({ detail, setDetail, goDetail }) {
                       }
                     </td>
                     <td><span className={`badge ${o.status}`}>{o.status}</span></td>
+                    {isAdmin && (
+                      <td onClick={e => e.stopPropagation()}>
+                        <button className="btn" style={{ fontSize: 11, padding: '4px 10px', color: '#ef4444', borderColor: '#fecaca' }} onClick={() => setDeleteConfirm(o)}>Delete</button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -266,6 +278,7 @@ export default function Orders({ detail, setDetail, goDetail }) {
         </div>
       </div>
       {modal && <Modal form={form} setForm={setForm} save={save} close={() => setModal(false)} title="New customer order" fields={orderFields} />}
+      {deleteConfirm && <DeleteModal title="Delete order" message={`Are you sure you want to delete order ${deleteConfirm.id}? This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
 }
