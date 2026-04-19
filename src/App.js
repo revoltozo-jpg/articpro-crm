@@ -11,6 +11,7 @@ import Dashboard from './components/Dashboard';
 import Import from './components/Import';
 import Users from './components/Users';
 import Reports from './components/Reports';
+import ChangePassword from './components/ChangePassword';
 import './App.css';
 
 const icons = {
@@ -34,6 +35,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userRole, setUserRole] = useState('viewer');
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [view, setView] = useState('dashboard');
   const [detail, setDetail] = useState(null);
   const [showImport, setShowImport] = useState(false);
@@ -51,6 +54,9 @@ export default function App() {
             const adminsSnap = await getDocs(collection(db, 'admins'));
             const adminEmails = adminsSnap.docs.map(d => d.id);
             setUserRole(adminEmails.includes(u.email) ? 'admin' : 'viewer');
+          }
+          if (found?.mustChangePassword) {
+            setMustChangePassword(true);
           }
         } catch (err) { setUserRole('viewer'); }
       }
@@ -74,6 +80,23 @@ export default function App() {
   );
 
   if (!user) return <Login />;
+
+  if (mustChangePassword) return (
+    <div style={{ minHeight: '100vh', background: '#0f1729', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: '0 24px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', letterSpacing: '0.5px', marginBottom: 4 }}>PROTEC<span style={{ color: '#60a5fa' }}>®</span></div>
+          <div style={{ fontSize: 11, color: '#60a5fa', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Applied Mechanical Products</div>
+        </div>
+        <ChangePassword
+          forced={true}
+          onClose={(success) => {
+            if (success) setMustChangePassword(false);
+          }}
+        />
+      </div>
+    </div>
+  );
 
   const navGroups = [
     { label: 'Overview', items: [
@@ -132,6 +155,12 @@ export default function App() {
             <div style={{ fontSize: 11, color: '#64748b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
             <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: roleBadgeColor[userRole], color: '#fff' }}>{ROLES[userRole]?.label}</span>
           </div>
+          <button
+            onClick={() => setShowChangePassword(true)}
+            style={{ width: '100%', padding: '7px', background: 'transparent', border: '1px solid #1e293b', borderRadius: 6, color: '#64748b', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 6 }}
+          >
+            Change password
+          </button>
           <button className="signout-btn" onClick={() => signOut(auth)}>Sign out</button>
         </div>
       </div>
@@ -147,6 +176,15 @@ export default function App() {
       </div>
 
       {showImport && <Import onClose={() => setShowImport(false)} />}
+      {showChangePassword && (
+        <ChangePassword
+          forced={false}
+          onClose={(success) => {
+            setShowChangePassword(false);
+            if (success) alert('Password updated successfully!');
+          }}
+        />
+      )}
     </div>
   );
 }

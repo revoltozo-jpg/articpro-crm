@@ -52,13 +52,14 @@ export default function Users() {
         isAdmin: form.role === 'admin',
         createdAt: new Date().toISOString(),
         status: 'Active',
+        mustChangePassword: true,
       });
 
       if (form.role === 'admin') {
         await setDoc(doc(db, 'admins', form.email), { isAdmin: true, name: form.name });
       }
 
-      setSuccess(`User ${form.email} created successfully!`);
+      setSuccess(`User ${form.email} created! They will be prompted to set their own password on first login.`);
       setForm({ name: '', email: '', password: '', role: 'sales' });
       setModal(false);
       load();
@@ -158,6 +159,7 @@ export default function Users() {
                 { label: 'Edit all records', keys: ['sales','manager','admin'] },
                 { label: 'Delete records', keys: ['admin'] },
                 { label: 'Import from Excel', keys: ['admin'] },
+                { label: 'View reports', keys: ['manager','admin'] },
                 { label: 'Manage users', keys: ['admin'] },
               ].map(row => (
                 <tr key={row.label}>
@@ -184,7 +186,7 @@ export default function Users() {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Created</th>
+                <th>Password</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -209,18 +211,20 @@ export default function Users() {
                         {ROLES[u.role]?.label || 'Admin'}
                       </span>
                     ) : (
-                      <select
-                        value={u.role || 'viewer'}
-                        onChange={e => updateRole(u, e.target.value)}
-                        style={{ padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#f8fafc', cursor: 'pointer' }}
-                      >
+                      <select value={u.role || 'viewer'} onChange={e => updateRole(u, e.target.value)}
+                        style={{ padding: '4px 8px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', background: '#f8fafc', cursor: 'pointer' }}>
                         {Object.entries(ROLES).map(([key, r]) => (
                           <option key={key} value={key}>{r.label}</option>
                         ))}
                       </select>
                     )}
                   </td>
-                  <td style={{ color: '#94a3b8', fontSize: 12 }}>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}</td>
+                  <td>
+                    {u.mustChangePassword
+                      ? <span style={{ fontSize: 11, color: '#854d0e', background: '#fef9c3', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Pending reset</span>
+                      : <span style={{ fontSize: 11, color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>Set</span>
+                    }
+                  </td>
                   <td><span className={`badge ${u.status}`}>{u.status}</span></td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -241,7 +245,7 @@ export default function Users() {
         </div>
 
         <div style={{ marginTop: 16, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', fontSize: 12, color: '#92400e' }}>
-          ⚠️ Role changes take effect the next time the user logs in or refreshes the page.
+          ⚠️ Role changes take effect the next time the user logs in or refreshes. New users are prompted to set their own password on first login.
         </div>
       </div>
 
@@ -271,12 +275,8 @@ export default function Users() {
                 ))}
               </select>
             </div>
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#64748b', marginBottom: 16 }}>
-              <strong>{ROLES[form.role]?.label} permissions:</strong><br/>
-              {form.role === 'viewer' && 'Can view all records but cannot create, edit or delete anything.'}
-              {form.role === 'sales' && 'Can create and edit customers and orders. Cannot manage vendors, POs, or delete records.'}
-              {form.role === 'manager' && 'Can create and edit everything. Cannot delete records or manage users.'}
-              {form.role === 'admin' && 'Full access including delete, Excel import, and user management.'}
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#15803d', marginBottom: 16 }}>
+              ✓ The user will be prompted to set their own password on their first login.
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button className="btn" onClick={() => setModal(false)}>Cancel</button>
