@@ -263,7 +263,6 @@ export default function PurchaseOrders({ detail, setDetail, goDetail, perms }) {
       {deleteConfirm && <DeleteModal title="Delete purchase order" message={`Delete ${deleteConfirm.id}? The linked customer order will be unlinked. This cannot be undone.`} onConfirm={() => deleteRecord(deleteConfirm)} onCancel={() => setDeleteConfirm(null)} />}
     </div>
   );
-}import React, { useEffect, useState } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Modal, DeleteModal } from './Customers';
