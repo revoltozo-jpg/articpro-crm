@@ -1,7 +1,8 @@
 // HelpCenter — built-in user manual with search.
 // Opens as a full-screen overlay. Left rail = category nav, right pane =
 // rendered article. Search bar filters across all articles in real time and
-// shows matching results above the category nav.
+// the right pane jumps to the top result so typing a question feels like
+// asking and getting an answer immediately.
 //
 // Content is intentionally written in plain English for non-technical
 // operations users — not jargon-y developer docs. Every flow is described
@@ -12,7 +13,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 // =============================================================================
 // CONTENT
 // =============================================================================
-// Each article: { id, title, category, body }
+// Each article: { id, title, category, body, keywords? }
+// `keywords` (optional) is extra search vocabulary so a user typing common
+// alternate phrasings still lands on the right article.
 // `body` is an array of blocks. A block is one of:
 //   { type: 'p', text: '...' }
 //   { type: 'h', text: '...' }                 // section heading
@@ -28,6 +31,7 @@ const ARTICLES = [
     id: 'overview',
     title: 'What this system does',
     category: 'Getting started',
+    keywords: 'overview introduction what is purpose summary about platform replace matrix',
     body: [
       { type: 'p', text: 'This is the Protec operations platform. It replaces the old Matrix spreadsheet with a real system that tracks every sales order from quote to closeout, manages vendor purchase orders and acknowledgments, runs the warehouse workflow, handles international export documents, and surfaces what needs attention right now.' },
       { type: 'h', text: 'The core idea' },
@@ -49,6 +53,7 @@ const ARTICLES = [
     id: 'roles',
     title: 'User roles and permissions',
     category: 'Getting started',
+    keywords: 'roles permissions access user types viewer sales manager admin who can see what',
     body: [
       { type: 'p', text: 'Each user has a role that controls what they can see and do.' },
       { type: 'h', text: 'The four roles' },
@@ -66,16 +71,16 @@ const ARTICLES = [
     id: 'navigation',
     title: 'Finding your way around',
     category: 'Getting started',
+    keywords: 'navigation sidebar menu screens where layout',
     body: [
       { type: 'p', text: 'The sidebar on the left has every screen, grouped by area:' },
       { type: 'bullets', items: [
-        'Overview — Dashboard and Reports (legacy).',
-        'Sales — Customers and the legacy Customer orders.',
-        'Procurement — Vendors and legacy Purchase orders.',
-        'Operations (v2) — the new operations platform: Operations dashboard, Sales orders, Scheduler, Vendor POs, Shipments, Inventory, Forwarders, Reports (v2).',
+        'Overview — Dashboard and Reports.',
+        'Sales — Customers and Sales orders.',
+        'Procurement — Vendors and Vendor POs.',
+        'Operations — Scheduler, Shipments, Inventory, Forwarders.',
         'Admin — User management (admins only).',
       ]},
-      { type: 'p', text: 'For the new operations workflow, only the Operations (v2) section matters. The legacy items above are kept temporarily so existing data is still accessible while the team migrates.' },
       { type: 'h', text: 'The notification bell' },
       { type: 'p', text: 'In the bottom-left of the sidebar, next to your email, you will see a small bell icon. It auto-refreshes every 60 seconds and shows a colored badge when something needs attention. Click it to see the list and jump straight to the relevant order or PO.' },
     ],
@@ -84,13 +89,14 @@ const ARTICLES = [
   // -------------------------------- Sales Orders -----------------------------
   {
     id: 'create-quote',
-    title: 'Creating a quote',
+    title: 'Creating a quote or sales order',
     category: 'Sales orders',
+    keywords: 'create new quote sales order start make add new project record customer',
     body: [
       { type: 'p', text: 'Every project starts as a Quote. Even if you already have the customer PO in hand, the system creates the record at the Quote stage and you progress it from there.' },
       { type: 'h', text: 'Steps' },
       { type: 'steps', items: [
-        'Sidebar → Operations (v2) → Sales orders.',
+        'Sidebar → Sales orders.',
         'Click the "+ New quote" button in the top-right.',
         'Pick the Customer from the dropdown. (If they are not in the list, create them in Customers first.)',
         'Fill in Product / model, Quantity, Unit price, Quote date.',
@@ -107,6 +113,7 @@ const ARTICLES = [
     id: 'gates',
     title: 'The PO and submittals gates',
     category: 'Sales orders',
+    keywords: 'po submittals gate received approved customer purchase order mark blocked',
     body: [
       { type: 'p', text: 'Two things must happen before an order can move forward: the customer must send their PO, and submittals must be approved.' },
       { type: 'h', text: 'Mark customer PO received' },
@@ -128,6 +135,7 @@ const ARTICLES = [
     id: 'validation',
     title: 'Operations validation checklist',
     category: 'Sales orders',
+    keywords: 'validation checklist verify confirm models quantities accessories operations check before route',
     body: [
       { type: 'p', text: 'After the gates are green, Operations runs a validation pass to confirm the order matches the quote and submittals before committing to vendors.' },
       { type: 'h', text: 'The five checks' },
@@ -146,6 +154,7 @@ const ARTICLES = [
     id: 'routing',
     title: 'Routing: Drop Ship vs Warehouse',
     category: 'Sales orders',
+    keywords: 'route routing drop ship warehouse pick choose how delivery method international incoterm',
     body: [
       { type: 'p', text: 'Once gates and validation are complete, you decide how the material gets to the customer.' },
       { type: 'h', text: 'Drop Ship' },
@@ -169,6 +178,7 @@ const ARTICLES = [
     id: 'shipment-plan',
     title: 'Shipment plan: split and phased shipments',
     category: 'Sales orders',
+    keywords: 'shipment plan split phased partial multiple deliveries lines tracking carrier backorder',
     body: [
       { type: 'p', text: 'A shipment plan is a list of shipment lines. For a simple order, add one line. For phased deliveries, multi-vendor projects, or partial shipments, add multiple lines.' },
       { type: 'h', text: 'Adding a shipment line' },
@@ -194,6 +204,7 @@ const ARTICLES = [
     id: 'communications',
     title: 'Logging communications',
     category: 'Sales orders',
+    keywords: 'communications log email phone call message customer vendor talk note',
     body: [
       { type: 'p', text: 'Every conversation with the customer, vendor, forwarder, or warehouse should be logged on the order. This is what replaces digging through email threads to find "what did we say last Thursday?".' },
       { type: 'h', text: 'How to log' },
@@ -213,6 +224,7 @@ const ARTICLES = [
     id: 'issues',
     title: 'Logging and resolving issues',
     category: 'Sales orders',
+    keywords: 'issue problem damage shortage late wrong material missing documents log resolve flag',
     body: [
       { type: 'p', text: 'When something goes wrong — shortage, damage, late shipment, missing documents, wrong material — log it as an issue. The order becomes flagged and shows up in the dashboard alerts.' },
       { type: 'h', text: 'Logging an issue' },
@@ -233,6 +245,7 @@ const ARTICLES = [
     id: 'documents',
     title: 'Attaching documents',
     category: 'Sales orders',
+    keywords: 'documents attachments files upload link drive dropbox sharepoint po submittal drawing',
     body: [
       { type: 'p', text: 'The Documents card on every order is where you link to all the files for that project — customer PO, submittals, drawings, test reports, anything.' },
       { type: 'h', text: 'How it works' },
@@ -256,6 +269,7 @@ const ARTICLES = [
     id: 'issue-vendor-po',
     title: 'Issuing a vendor PO',
     category: 'Procurement',
+    keywords: 'vendor po purchase order issue create new procurement supplier order parts material',
     body: [
       { type: 'p', text: 'Once an order is routed (or earlier if the route does not affect procurement), Operations issues a vendor PO. An order can have multiple POs to different vendors.' },
       { type: 'h', text: 'Steps' },
@@ -277,6 +291,7 @@ const ARTICLES = [
     id: 'vendor-ack',
     title: 'Recording vendor acknowledgment',
     category: 'Procurement',
+    keywords: 'vendor ack acknowledgment commit date discrepancy confirm record po acknowledged ordered',
     body: [
       { type: 'p', text: 'When the vendor acknowledges your PO — either confirming the order or flagging a discrepancy — record it. This captures the vendor commit date that drives the rest of your timeline.' },
       { type: 'h', text: 'Steps' },
@@ -298,6 +313,7 @@ const ARTICLES = [
     id: 'esd-history',
     title: 'Tracking ESD changes',
     category: 'Procurement',
+    keywords: 'esd estimated ship date change history slip moved delay vendor commit',
     body: [
       { type: 'p', text: 'When the vendor moves the commit date, the system records the change in a Lead time / ESD history table on the PO. Every change is timestamped with the previous date, the new date, and how many days it slipped.' },
       { type: 'h', text: 'How changes get logged' },
@@ -313,6 +329,7 @@ const ARTICLES = [
     id: 'vendor-lead-times',
     title: 'Setting vendor lead times',
     category: 'Procurement',
+    keywords: 'lead time vendor days set scheduler edd estimated delivery default',
     body: [
       { type: 'p', text: 'The Scheduler and the Quote EDD calculation both use the vendor\'s lead time in days. Without it, the system defaults to 14 days, which is rarely accurate.' },
       { type: 'h', text: 'Setting it' },
@@ -331,6 +348,7 @@ const ARTICLES = [
     id: 'warehouse-flow',
     title: 'Warehouse workflow',
     category: 'Warehouse',
+    keywords: 'warehouse receive inspect stage dispatch deliver workflow steps physical material',
     body: [
       { type: 'p', text: 'When an order is routed Warehouse, a Warehouse workflow card appears on the order detail. It walks the material through 6 steps.' },
       { type: 'h', text: 'The 6 steps' },
@@ -359,11 +377,12 @@ const ARTICLES = [
     id: 'forwarders',
     title: 'Freight forwarders',
     category: 'International',
+    keywords: 'forwarder freight international assign export shipping logistics',
     body: [
       { type: 'p', text: 'For international shipments, you assign a freight forwarder per order. Forwarders are stored as records in the Forwarders module.' },
       { type: 'h', text: 'Adding a forwarder' },
       { type: 'steps', items: [
-        'Sidebar → Operations (v2) → Forwarders.',
+        'Sidebar → Forwarders.',
         'Click "+ New forwarder".',
         'Fill in name, contact, email, phone, country/region, address, default Incoterm.',
         'Save.',
@@ -382,6 +401,7 @@ const ARTICLES = [
     id: 'incoterms',
     title: 'Understanding Incoterms (FCA, CIF, EXW)',
     category: 'International',
+    keywords: 'incoterm fca cif exw international shipping responsibility free carrier ex works cost insurance freight',
     body: [
       { type: 'p', text: 'When you flag an order as international, you must pick an Incoterm. The Incoterm defines who is responsible for what at each point in the shipment.' },
       { type: 'bullets', items: [
@@ -396,6 +416,7 @@ const ARTICLES = [
     id: 'export-docs',
     title: 'Export documents',
     category: 'International',
+    keywords: 'export documents commercial invoice packing list certificate origin bill lading awb eei insurance',
     body: [
       { type: 'p', text: 'For every international order, Protec must coordinate or prepare a set of export documents. The system provides a checklist on each international order.' },
       { type: 'h', text: 'The 6 standard documents' },
@@ -417,6 +438,7 @@ const ARTICLES = [
     id: 'inventory-overview',
     title: 'How inventory works',
     category: 'Inventory',
+    keywords: 'inventory stock sku on hand reserved available incoming low out',
     body: [
       { type: 'p', text: 'The Inventory module tracks SKUs you keep in the Protec warehouse. For each SKU, it shows on-hand, reserved, available, and incoming quantities.' },
       { type: 'h', text: 'The math' },
@@ -434,6 +456,7 @@ const ARTICLES = [
     id: 'stock-adjustments',
     title: 'Adjusting stock levels',
     category: 'Inventory',
+    keywords: 'stock adjust adjustment cycle count receive ship damage manual sku change',
     body: [
       { type: 'p', text: 'When a physical count differs from the system, or when you receive/ship/discard stock outside the order flow, record an adjustment. Every adjustment is logged with reason, before/after, user, and timestamp.' },
       { type: 'h', text: 'Steps' },
@@ -454,8 +477,9 @@ const ARTICLES = [
   // -------------------------------- Operations -------------------------------
   {
     id: 'operations-dashboard',
-    title: 'The Operations Dashboard',
+    title: 'The Dashboard (Operations)',
     category: 'Operations',
+    keywords: 'dashboard operations kpi attention alerts upcoming deliveries vendor health start day',
     body: [
       { type: 'p', text: 'This is the screen Operations should open at the start of every day. It replaces "the Matrix" — instead of scanning rows of a spreadsheet, you see KPIs, actionable alerts, upcoming deliveries, and vendor health.' },
       { type: 'h', text: 'KPI strip (top)' },
@@ -474,6 +498,7 @@ const ARTICLES = [
     id: 'scheduler',
     title: 'Using the Scheduler',
     category: 'Operations',
+    keywords: 'scheduler ready route blocked queue plan ship date suggest vendor',
     body: [
       { type: 'p', text: 'The Scheduler shows orders that are confirmed but not yet routed. For each one, you pick a route (Drop Ship or Warehouse) and a vendor. The system suggests a planned ship date based on the vendor\'s lead time.' },
       { type: 'h', text: 'Workflow' },
@@ -492,6 +517,7 @@ const ARTICLES = [
     id: 'shipments-page',
     title: 'The Shipments page',
     category: 'Operations',
+    keywords: 'shipments list tracking carrier filter all in transit late delivered',
     body: [
       { type: 'p', text: 'A master list of every shipment line across every order, plus PO-level tracking when no shipment line was created. Use this when you want to see all in-flight shipments without opening each order.' },
       { type: 'h', text: 'Filters' },
@@ -502,8 +528,9 @@ const ARTICLES = [
   },
   {
     id: 'reports-v2',
-    title: 'Reports (v2)',
+    title: 'Reports',
     category: 'Operations',
+    keywords: 'reports vendor performance customer on time pipeline inventory snapshot statistics',
     body: [
       { type: 'p', text: 'Four operational reports across tabs.' },
       { type: 'h', text: 'Vendor performance' },
@@ -522,6 +549,7 @@ const ARTICLES = [
     id: 'bell',
     title: 'The notification bell',
     category: 'Alerts',
+    keywords: 'bell notification alert badge red amber dot icon sidebar count',
     body: [
       { type: 'p', text: 'In the bottom-left of the sidebar, next to your email, the bell icon shows a real-time count of items needing attention.' },
       { type: 'h', text: 'What the colors mean' },
@@ -541,6 +569,7 @@ const ARTICLES = [
     id: 'matrix-import',
     title: 'Importing the Matrix from Excel',
     category: 'Data',
+    keywords: 'import matrix excel xlsx upload bulk migrate spreadsheet existing data',
     body: [
       { type: 'p', text: 'The Excel importer (Admin only) reads your existing Matrix spreadsheet and creates Sales Orders with all operational fields populated.' },
       { type: 'h', text: 'Steps' },
@@ -561,6 +590,7 @@ const ARTICLES = [
     id: 'excel-other',
     title: 'Importing customers, vendors, POs',
     category: 'Data',
+    keywords: 'import excel customers vendors purchase orders bulk upload xlsx',
     body: [
       { type: 'p', text: 'The same Import from Excel flow handles standard imports of customers, vendors, customer orders, and purchase orders. The importer auto-detects sheet type from headers but you can override.' },
       { type: 'h', text: 'Recognized columns' },
@@ -591,6 +621,7 @@ const CATEGORIES = [
 // =============================================================================
 function flattenForSearch(article) {
   const parts = [article.title, article.category];
+  if (article.keywords) parts.push(article.keywords);
   for (const b of article.body) {
     if (b.text) parts.push(b.text);
     if (Array.isArray(b.items)) parts.push(b.items.join(' '));
@@ -600,21 +631,49 @@ function flattenForSearch(article) {
 
 const SEARCH_INDEX = ARTICLES.map(a => ({ article: a, haystack: flattenForSearch(a) }));
 
+// Common question words and stopwords. Without filtering these, a query like
+// "how do I create a sales order" would fail because 'how' and 'do' and 'i'
+// don't appear in any article body.
+const STOPWORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'can', 'could',
+  'do', 'does', 'doing', 'for', 'from', 'has', 'have', 'how', 'i',
+  'if', 'in', 'is', 'it', 'me', 'my', 'of', 'on', 'or', 'should',
+  'so', 'some', 'than', 'that', 'the', 'their', 'them', 'then',
+  'there', 'these', 'they', 'this', 'to', 'use', 'want', 'was',
+  'we', 'were', 'what', 'when', 'where', 'which', 'who', 'why',
+  'will', 'with', 'would', 'you', 'your',
+]);
+
+const REGEX_ESCAPE = /[.*+?^${}()|[\]\\]/g;
+
 function searchArticles(q) {
   const needle = q.trim().toLowerCase();
   if (!needle) return [];
-  const tokens = needle.split(/\s+/).filter(Boolean);
+  // Strip punctuation, split into words, drop stopwords.
+  const rawTokens = needle.replace(/[?!.,;:'"()]/g, ' ').split(/\s+/).filter(Boolean);
+  let tokens = rawTokens.filter(t => !STOPWORDS.has(t));
+  // If everything got filtered out (e.g. user typed only stopwords), fall back
+  // to the raw tokens so we still try to match something.
+  if (tokens.length === 0) tokens = rawTokens;
+  if (tokens.length === 0) return [];
+
   return SEARCH_INDEX
     .map(({ article, haystack }) => {
       let score = 0;
-      let matched = true;
+      let anyMatch = false;
       for (const t of tokens) {
-        const hits = (haystack.match(new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-        if (hits === 0) { matched = false; break; }
-        score += hits;
-        if (article.title.toLowerCase().includes(t)) score += 10;
+        const escaped = t.replace(REGEX_ESCAPE, '\\$&');
+        const hits = (haystack.match(new RegExp(escaped, 'g')) || []).length;
+        if (hits > 0) {
+          anyMatch = true;
+          score += hits;
+          // Big bonus for matches in the title — that's almost always the best answer.
+          if (article.title.toLowerCase().includes(t)) score += 25;
+          // Smaller bonus for matches in the category.
+          if (article.category.toLowerCase().includes(t)) score += 5;
+        }
       }
-      return matched ? { article, score } : null;
+      return anyMatch ? { article, score } : null;
     })
     .filter(Boolean)
     .sort((a, b) => b.score - a.score)
@@ -623,11 +682,13 @@ function searchArticles(q) {
 }
 
 // Highlight occurrences of q (case-insensitive) within text. Returns React nodes.
+// Highlighting also drops stopwords so we don't visually mark tiny words like "to".
 function highlight(text, q) {
   if (!q) return text;
-  const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const rawTokens = q.trim().toLowerCase().replace(/[?!.,;:'"()]/g, ' ').split(/\s+/).filter(Boolean);
+  const tokens = rawTokens.filter(t => !STOPWORDS.has(t));
   if (tokens.length === 0) return text;
-  const pattern = new RegExp(`(${tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+  const pattern = new RegExp(`(${tokens.map(t => t.replace(REGEX_ESCAPE, '\\$&')).join('|')})`, 'gi');
   const parts = String(text).split(pattern);
   return parts.map((p, i) =>
     pattern.test(p)
@@ -701,12 +762,12 @@ export default function HelpCenter({ onClose }) {
   const [activeId, setActiveId] = useState(ARTICLES[0].id);
   const searchRef = useRef(null);
 
-  // Auto-focus search on open
+  // Auto-focus search on open.
   useEffect(() => {
     setTimeout(() => searchRef.current?.focus(), 50);
   }, []);
 
-  // Esc closes
+  // Esc closes.
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -716,15 +777,24 @@ export default function HelpCenter({ onClose }) {
   const searchResults = useMemo(() => searchArticles(query), [query]);
   const showingSearch = query.trim().length > 0;
 
-  // Active article: if searching and there's a match, prefer top result; else use activeId.
+  // Track the previous query so we know when the user just typed something new.
+  // When the query changes, we always jump the right pane to the top result —
+  // that way typing a question feels like asking and getting an answer.
+  const prevQueryRef = useRef('');
+  const queryJustChanged = prevQueryRef.current !== query;
+  useEffect(() => { prevQueryRef.current = query; }, [query]);
+
+  // Active article: when searching, jump to the top result whenever the query
+  // changed; if the user clicked a different result manually, keep that.
   const active = useMemo(() => {
     if (showingSearch && searchResults.length > 0) {
-      // If activeId is in results, keep it; otherwise jump to top result.
+      if (queryJustChanged) return searchResults[0];
       const inResults = searchResults.find(a => a.id === activeId);
       return inResults || searchResults[0];
     }
     return ARTICLES.find(a => a.id === activeId) || ARTICLES[0];
-  }, [showingSearch, searchResults, activeId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showingSearch, searchResults, activeId, query]);
 
   const articlesByCategory = useMemo(() => {
     const out = {};
@@ -757,7 +827,7 @@ export default function HelpCenter({ onClose }) {
             <input
               ref={searchRef}
               type="text"
-              placeholder="Search the manual… (e.g. 'route order', 'vendor ack', 'incoterm')"
+              placeholder="Ask anything… (e.g. 'how to create a sales order')"
               value={query}
               onChange={e => setQuery(e.target.value)}
               style={{
