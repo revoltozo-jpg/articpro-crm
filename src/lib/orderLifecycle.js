@@ -333,3 +333,121 @@ export function vendorPOAckOverdue(po, daysSinceOrder = 5) {
   const days = daysBetween(po.orderDate, new Date().toISOString().slice(0, 10));
   return days !== null && days >= daysSinceOrder;
 }
+
+// -----------------------------------------------------------------------------
+// Quote-stage estimated delivery
+// -----------------------------------------------------------------------------
+// Sales reps need an EDD on the quote so they can give the customer a real
+// commitment up front. We compute it from the chosen vendor's lead time +
+// a configurable internal buffer (handling, transit, paperwork).
+export const QUOTE_BUFFER_DAYS = 7; // default safety buffer added on quotes
+
+export function computeEstimatedDelivery(quoteDate, vendorLeadDays, bufferDays = QUOTE_BUFFER_DAYS) {
+  const baseDate = quoteDate || new Date().toISOString().slice(0, 10);
+  const lead = Number(vendorLeadDays || 14);
+  const buf = Number(bufferDays || 0);
+  return addDays(baseDate, lead + buf);
+}
+
+// -----------------------------------------------------------------------------
+// Alerts collection
+// -----------------------------------------------------------------------------
+// Builds the same alert items the Operations Dashboard surfaces, in a form
+// suitable for the global notification bell. Caller passes orders + pos and
+// gets back a sorted list of {severity, label, sub, target: {view, id}}.
+export function collectAlerts(orders, pos) {
+  const out = [];
+  const now = new Date().toISOString().slice(0, 10);
+
+  // Late vendor POs
+  pos.filter(vendorPOIsLate).forEach(p => {
+    const o = orders.find(x => x.id === p.relatedSO);
+    const target = p.vendorCommitDate || p.expectedDate;
+    const daysLate = daysBetween(target, now);
+    out.push({
+      severity: 'high',
+      icon: '⚠',
+      label: `Vendor late: ${p.vendorName}`,
+      sub: `${p.id.slice(0, 8)} · ${daysLate}d overdue${o ? ` · ${o.customerName}` : ''}`,
+      target: { view: 'purchase_orders_v2', id: p.id },
+      sortKey: -1000 - (daysLate || 0),
+    });
+  });
+
+  // Vendor ack overdue
+  pos.filter(p => vendorPOAckOverdue(p, 5)).forEach(p => {
+    const o = orders.find(x => x.id === p.relatedSO);
+    out.push({
+      severity: 'medium',
+      icon: '⏱',
+      label: `No vendor ack: ${p.vendorName}`,
+      sub: `${p.id.slice(0, 8)}${o ? ` · ${o.customerName}` : ''}`,
+      target: { view: 'purchase_orders_v2', id: p.id },
+      sortKey: -500,
+    });
+  });
+
+  // Discrepancies
+  pos.filter(p => p.vendorAckStatus === 'Discrepancy').forEach(p => {
+    out.push({
+      severity: 'high',
+      icon: '!',
+      label: `Discrepancy: ${p.vendorName}`,
+      sub: `${p.id.slice(0, 8)} — ${(p.ackNotes || 'See PO').slice(0, 60)}`,
+      target: { view: 'purchase_orders_v2', id: p.id },
+      sortKey: -800,
+    });
+  });
+
+  // Promise dates at risk: ETA after promise (live orders only)
+  orders.forEach(o => {
+    if (!o.promiseDate) return;
+    const s = normalizeStatus(o.status);
+    if (s === LIFECYCLE.DELIVERED || s === LIFECYCLE.CLOSED) return;
+    const eta = o.eta || o.plannedShipDate;
+    if (!eta) return;
+    const slip = daysBetween(eta, o.promiseDate); // negative => eta is after promise
+    if (slip < 0) {
+      out.push({
+        severity: 'high',
+        icon: '📅',
+        label: `Promise at risk: ${o.customerName}`,
+        sub: `Promised ${o.promiseDate}, ETA ${eta} (${Math.abs(slip)}d slip)`,
+        target: { view: 'orders_v2', id: o.id },
+        sortKey: -900 - Math.abs(slip),
+      });
+    }
+  });
+
+  // Blocked orders
+  orders.forEach(o => {
+    const linked = pos.filter(p => p.relatedSO === o.id);
+    const { blockedAt } = getStageInfo(o, linked);
+    if (!blockedAt) return;
+    const labels = { po: 'Awaiting customer PO', submittals: 'Awaiting submittals', hold: 'On hold', issue: 'Has open issue' };
+    out.push({
+      severity: blockedAt === 'issue' ? 'high' : 'medium',
+      icon: blockedAt === 'hold' ? '⏸' : '⛔',
+      label: `${labels[blockedAt]}: ${o.customerName}`,
+      sub: `${o.id.slice(0, 8)}`,
+      target: { view: 'orders_v2', id: o.id },
+      sortKey: blockedAt === 'issue' ? -700 : -200,
+    });
+  });
+
+  // Backorders
+  orders.forEach(o => {
+    const back = (o.shipmentPlan || []).filter(l => l.status === 'Backorder');
+    if (back.length === 0) return;
+    out.push({
+      severity: 'medium',
+      icon: '📦',
+      label: `Backorder: ${o.customerName}`,
+      sub: `${back.length} line${back.length > 1 ? 's' : ''} on ${o.id.slice(0, 8)}`,
+      target: { view: 'orders_v2', id: o.id },
+      sortKey: -100,
+    });
+  });
+
+  return out.sort((a, b) => a.sortKey - b.sortKey);
+}

@@ -11,11 +11,12 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Modal } from './Customers';
+import OrderAttachments from './OrderAttachments';
 import {
   LIFECYCLE, STAGES, STATUS_COLORS, HEALTH_COLORS, ROUTE_LABELS, INCOTERMS,
   VALIDATION_ITEMS, isValidationComplete, SHIPMENT_STATUSES, shipmentPlanSummary,
   PAYMENT_TERMS, INVOICE_MILESTONES, WAREHOUSE_STEPS, getWarehouseStepIndex,
-  EXPORT_DOCS, exportDocsComplete,
+  EXPORT_DOCS, exportDocsComplete, computeEstimatedDelivery,
   getStageInfo, getDeliveryHealth, normalizeStatus, daysBetween,
   computePlannedShipDate, logOrderEvent,
 } from '../lib/orderLifecycle';
@@ -459,6 +460,24 @@ export default function OrderDetail({ order: initialOrder, customers, vendors, p
           <div className="section-title">Operations stage</div>
           <StageRail order={order} pos={linkedPOs} />
         </div>
+
+        {/* Quote-stage estimated delivery banner */}
+        {normalizeStatus(order.status) === LIFECYCLE.QUOTE && order.estimatedDelivery && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px',
+            background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10,
+            marginBottom: 16,
+          }}>
+            <div style={{ fontSize: 24 }}>📅</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimated delivery to customer</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#312e81', marginTop: 2 }}>{order.estimatedDelivery}</div>
+              <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2 }}>
+                Based on {order.eddVendorName || 'vendor'} lead time of {order.eddVendorLeadDays || 14} days + 7d buffer. Use this in your quote to the customer.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Dates strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
@@ -931,6 +950,9 @@ export default function OrderDetail({ order: initialOrder, customers, vendors, p
             </div>
           </div>
         )}
+
+        {/* Documents (attachments) */}
+        <OrderAttachments order={order} perms={perms} onUpdated={(patch) => setOrder({ ...order, ...patch })} />
 
         {/* Communications log */}
         <div className="card" style={{ marginBottom: 20 }}>

@@ -20,6 +20,7 @@ import Inventory from './components/Inventory';
 import Forwarders from './components/Forwarders';
 import Shipments from './components/Shipments';
 import ReportsV2 from './components/ReportsV2';
+import NotificationBell from './components/NotificationBell';
 import './App.css';
 
 const INACTIVITY_MS = 30 * 60 * 1000;
@@ -261,6 +262,7 @@ export default function App() {
 
         <div className="sidebar-footer">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <NotificationBell goDetail={goDetail} />
             <div style={{ fontSize: 11, color: '#64748b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
             <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: roleBadgeColor[userRole], color: '#fff' }}>{ROLES[userRole]?.label}</span>
           </div>

@@ -10,6 +10,7 @@ import OrderDetail from './OrderDetail';
 import {
   LIFECYCLE, LIFECYCLE_LIST, STATUS_GROUPS, STATUS_COLORS, HEALTH_COLORS,
   getDeliveryHealth, getStageInfo, normalizeStatus, logOrderEvent, ROUTE_LABELS,
+  computeEstimatedDelivery,
 } from '../lib/orderLifecycle';
 import './Shared.css';
 
@@ -114,6 +115,13 @@ export default function OrdersV2({ detail, setDetail, goDetail, perms }) {
     data.customerName = customer ? customer.name : '';
     data.qty = Number(data.qty) || 1;
     data.unitPrice = Number(data.unitPrice) || 0;
+    // Compute estimated delivery if a vendor is selected on the quote.
+    if (data.eddVendorId) {
+      const vendor = vendors.find(v => v.id === data.eddVendorId);
+      data.estimatedDelivery = computeEstimatedDelivery(data.date, vendor?.leadTimeDays);
+      data.eddVendorName = vendor ? vendor.name : '';
+      data.eddVendorLeadDays = vendor?.leadTimeDays || 14;
+    }
     if (data.id) {
       const { id, ...rest } = data;
       await updateDoc(doc(db, 'orders', id), rest);
@@ -131,8 +139,9 @@ export default function OrdersV2({ detail, setDetail, goDetail, perms }) {
         incoterm: '',
         issues: [],
         shipmentPlan: [],
+        attachments: [],
       });
-      await logOrderEvent(ref.id, 'created', `Quote created for ${data.customerName}`);
+      await logOrderEvent(ref.id, 'created', `Quote created for ${data.customerName}${data.estimatedDelivery ? ` (EDD ${data.estimatedDelivery})` : ''}`);
     }
     setModal(false); load();
   };
@@ -143,6 +152,10 @@ export default function OrdersV2({ detail, setDetail, goDetail, perms }) {
     { key: 'qty', label: 'Quantity', type: 'number' },
     ...(canSeeMoney ? [{ key: 'unitPrice', label: 'Unit price ($)', type: 'number' }] : []),
     { key: 'date', label: 'Quote date', type: 'date' },
+    { key: 'eddVendorId', label: 'Vendor (for est. delivery)', type: 'select', options: [
+      { value: '', label: '— No vendor selected —' },
+      ...vendors.map(v => ({ value: v.id, label: `${v.name}${v.leadTimeDays ? ` (${v.leadTimeDays}d lead)` : ' (no lead time set)'}` })),
+    ]},
     { key: 'promiseDate', label: 'Promise date to customer (optional)', type: 'date' },
     { key: 'quoteRef', label: 'Quote reference', type: 'text' },
     { key: 'projectContacts', label: 'Project contacts', type: 'textarea' },
@@ -242,7 +255,7 @@ export default function OrdersV2({ detail, setDetail, goDetail, perms }) {
                     <td>{o.qty}</td>
                     {canSeeMoney && <td style={{ fontWeight: 600 }}>${(Number(o.qty) * Number(o.unitPrice)).toLocaleString()}</td>}
                     <td style={{ color: '#94a3b8', fontSize: 12 }}>{o.promiseDate || '—'}</td>
-                    <td style={{ color: '#94a3b8', fontSize: 12 }}>{o.eta || o.plannedShipDate || '—'}</td>
+                    <td style={{ color: '#94a3b8', fontSize: 12 }}>{o.eta || o.plannedShipDate || (normalizeStatus(o.status) === LIFECYCLE.QUOTE && o.estimatedDelivery ? <span style={{ color: '#1d4ed8' }}>EDD {o.estimatedDelivery}</span> : '—')}</td>
                     <td style={{ fontSize: 11, color: '#64748b' }}>{o.route ? ROUTE_LABELS[o.route] : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                     <td><MiniBadge status={o.status} /><MiniHealth order={o} /></td>
                   </tr>
