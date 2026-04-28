@@ -43,6 +43,35 @@ const fieldMaps = {
     expectedDate: ['expected', 'expected date', 'delivery date', 'eta', 'due date'],
     status: ['status', 'po status'],
   },
+  // Matrix import — the rich operations spreadsheet your team uses today.
+  // Maps directly into the v2 orders schema with all the operations fields.
+  matrix: {
+    customerName: ['customer', 'customer name', 'client', 'company', 'account', 'end user'],
+    contractNumber: ['contract', 'contract #', 'contract number', 'protec #', 'protec number', 'job #', 'job number', 'project #'],
+    customerPO: ['po', 'customer po', 'po #', 'po number', 'client po'],
+    quoteRef: ['quote', 'quote ref', 'quote #', 'quote number', 'quote reference'],
+    product: ['product', 'model', 'unit', 'item', 'description', 'equipment', 'scope'],
+    qty: ['qty', 'quantity', 'units', 'count'],
+    unitPrice: ['unit price', 'price', 'sell price', 'sale price'],
+    date: ['date', 'order date', 'sale date', 'created', 'received'],
+    promiseDate: ['promise', 'promise date', 'required', 'required date', 'need by', 'customer required', 'jobsite date', 'on site'],
+    plannedShipDate: ['planned ship', 'planned ship date', 'ship date', 'esd', 'estimated ship', 'estimated ship date'],
+    eta: ['eta', 'expected delivery', 'expected arrival'],
+    actualDeliveryDate: ['delivered', 'delivered date', 'actual delivery', 'arrival date'],
+    accessories: ['accessories', 'options', 'extras'],
+    projectContacts: ['contact', 'project contact', 'jis', 'site contact', 'project contacts'],
+    specialNotes: ['special', 'special notes', 'notes', 'comments', 'remarks'],
+    route: ['route', 'fulfillment', 'ship type', 'direct ship', 'warehouse'],
+    isInternational: ['international', 'export', 'intl', "int'l"],
+    incoterm: ['incoterm', 'incoterms', 'terms'],
+    paymentTerms: ['payment terms', 'terms', 'payment'],
+    invoiceNumber: ['invoice', 'invoice #', 'invoice number'],
+    invoiceDate: ['invoice date', 'billed', 'billing date'],
+    status: ['status', 'order status', 'state'],
+    customerPOReceived: ['po received', 'po in', 'po confirmed'],
+    submittalsApproved: ['submittals', 'submittal', 'submittals approved', 'submittal approved', 'approved submittals'],
+    vendorName: ['vendor', 'manufacturer', 'mfg', 'mfr'],
+  },
 };
 
 function matchField(header, fieldAliases) {
@@ -71,6 +100,7 @@ function detectSheetType(headers) {
     orders: 0,
     vendors: 0,
     purchase_orders: 0,
+    matrix: 0,
   };
 
   if (h.some(x => ['company', 'customer name', 'client', 'account'].some(k => x.includes(k)))) scores.customers += 2;
@@ -79,6 +109,15 @@ function detectSheetType(headers) {
   if (h.some(x => ['qty', 'quantity'].some(k => x.includes(k)))) scores.orders += 1;
   if (h.some(x => ['vendor', 'supplier', 'manufacturer', 'lead time', 'territory'].some(k => x.includes(k)))) scores.vendors += 2;
   if (h.some(x => ['po', 'purchase order', 'po total', 'expected date', 'eta'].some(k => x.includes(k)))) scores.purchase_orders += 2;
+
+  // Matrix detection: lots of operational columns combined indicate the master tracker.
+  let matrixSignals = 0;
+  ['customer po', 'po #', 'po number', 'submittal', 'promise', 'jobsite', 'esd',
+   'incoterm', 'route', 'forwarder', 'contract #', 'contract number'].forEach(k => {
+    if (h.some(x => x.includes(k))) matrixSignals++;
+  });
+  if (matrixSignals >= 3) scores.matrix = 100; // strong signal
+  else if (matrixSignals >= 2) scores.matrix = 6;
 
   return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 }
@@ -118,7 +157,7 @@ export default function Import({ onClose }) {
 
   const handleImport = async () => {
     setImporting(true);
-    const summary = { customers: 0, orders: 0, vendors: 0, purchase_orders: 0, skipped: 0 };
+    const summary = { customers: 0, orders: 0, vendors: 0, purchase_orders: 0, matrix: 0, skipped: 0 };
 
     for (const sheet of sheets) {
       const type = assignments[sheet.name];
@@ -180,6 +219,55 @@ export default function Import({ onClose }) {
               status: mapped.status || 'Draft',
             });
             summary.purchase_orders++;
+          } else if (type === 'matrix') {
+            // Map the Matrix master tracker into the v2 orders schema with all
+            // operational fields populated. Boolean fields accept yes/y/true/x/1.
+            const truthy = (v) => /^(y|yes|true|x|1|complete|received|approved)$/i.test(String(v || '').trim());
+            const route = (() => {
+              const r = String(mapped.route || '').toLowerCase();
+              if (r.includes('drop') || r.includes('direct')) return 'drop_ship';
+              if (r.includes('warehouse') || r.includes('stock')) return 'warehouse';
+              return '';
+            })();
+            const incotermRaw = String(mapped.incoterm || '').toUpperCase();
+            const incoterm = ['FCA', 'CIF', 'EXW'].find(t => incotermRaw.includes(t)) || '';
+            const isInternational = truthy(mapped.isInternational) || !!incoterm;
+
+            await addDoc(collection(db, 'orders'), {
+              customerName: mapped.customerName || '',
+              customerId: '',
+              contractNumber: mapped.contractNumber || '',
+              customerPO: mapped.customerPO || '',
+              quoteRef: mapped.quoteRef || '',
+              product: mapped.product || '',
+              qty: Number(mapped.qty) || 1,
+              unitPrice: Number(mapped.unitPrice) || 0,
+              date: mapped.date || '',
+              promiseDate: mapped.promiseDate || '',
+              plannedShipDate: mapped.plannedShipDate || '',
+              eta: mapped.eta || '',
+              actualDeliveryDate: mapped.actualDeliveryDate || '',
+              accessories: mapped.accessories || '',
+              projectContacts: mapped.projectContacts || '',
+              specialNotes: mapped.specialNotes || '',
+              route,
+              isInternational,
+              incoterm,
+              paymentTerms: mapped.paymentTerms || '',
+              invoiceNumber: mapped.invoiceNumber || '',
+              invoiceDate: mapped.invoiceDate || '',
+              customerPOReceived: truthy(mapped.customerPOReceived) || !!mapped.customerPO,
+              submittalsApproved: truthy(mapped.submittalsApproved),
+              validationComplete: false,
+              validation: {},
+              status: mapped.status || (mapped.actualDeliveryDate ? 'Delivered' : 'Confirmed'),
+              issues: [],
+              shipmentPlan: [],
+              vendorPO: '',
+              importedFromMatrix: true,
+              importedMatrixVendor: mapped.vendorName || '',
+            });
+            summary.matrix++;
           }
         } catch (err) {
           summary.skipped++;
@@ -197,6 +285,7 @@ export default function Import({ onClose }) {
     orders: 'Customer orders',
     vendors: 'Vendors',
     purchase_orders: 'Purchase orders',
+    matrix: 'Matrix → Sales orders (v2)',
     skip: 'Skip this sheet',
   };
 
@@ -296,6 +385,7 @@ export default function Import({ onClose }) {
                 { label: 'Orders imported', val: results.orders, icon: '📋' },
                 { label: 'Vendors imported', val: results.vendors, icon: '🏭' },
                 { label: 'POs imported', val: results.purchase_orders, icon: '🚚' },
+                ...(results.matrix ? [{ label: 'Matrix rows imported', val: results.matrix, icon: '📊' }] : []),
               ].map(m => (
                 <div key={m.label} className="info-box" style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: 24, marginBottom: 6 }}>{m.icon}</div>

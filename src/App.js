@@ -12,6 +12,14 @@ import Import from './components/Import';
 import Users from './components/Users';
 import Reports from './components/Reports';
 import ChangePassword from './components/ChangePassword';
+import OrdersV2 from './components/OrdersV2';
+import PurchaseOrdersV2 from './components/PurchaseOrdersV2';
+import Scheduler from './components/Scheduler';
+import OperationsDashboard from './components/OperationsDashboard';
+import Inventory from './components/Inventory';
+import Forwarders from './components/Forwarders';
+import Shipments from './components/Shipments';
+import ReportsV2 from './components/ReportsV2';
 import './App.css';
 
 const INACTIVITY_MS = 30 * 60 * 1000;
@@ -157,7 +165,11 @@ export default function App() {
   }, []);
 
   const nav = (v) => { setView(v); setDetail(null); };
-  const goDetail = (v, id) => { setView(v); setDetail(id); };
+  const goDetail = (v, id) => {
+    // Allow scheduler to deep-link into the v2 order view
+    if (v === 'orders_v2') { setView('orders_v2'); setDetail(id); return; }
+    setView(v); setDetail(id);
+  };
   const perms = ROLES[userRole] || ROLES.viewer;
   const isAdmin = userRole === 'admin';
 
@@ -196,6 +208,16 @@ export default function App() {
     { label: 'Procurement', items: [
       { key: 'vendors', label: 'Vendors' },
       { key: 'purchase_orders', label: 'Purchase orders' },
+    ]},
+    { label: 'Operations (v2)', items: [
+      { key: 'ops_dashboard', label: 'Operations dashboard' },
+      { key: 'orders_v2', label: 'Sales orders' },
+      { key: 'scheduler', label: 'Scheduler' },
+      { key: 'purchase_orders_v2', label: 'Vendor POs' },
+      { key: 'shipments', label: 'Shipments' },
+      { key: 'inventory', label: 'Inventory' },
+      { key: 'forwarders', label: 'Forwarders' },
+      ...(perms.canViewReports ? [{ key: 'reports_v2', label: 'Reports (v2)' }] : []),
     ]},
     ...(isAdmin ? [{ label: 'Admin', items: [{ key: 'users', label: 'User management' }] }] : []),
   ];
@@ -256,6 +278,14 @@ export default function App() {
         {view === 'orders' && <Orders detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
         {view === 'vendors' && <Vendors detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
         {view === 'purchase_orders' && <PurchaseOrders detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
+        {view === 'orders_v2' && <OrdersV2 detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
+        {view === 'scheduler' && <Scheduler goDetail={goDetail} perms={perms} />}
+        {view === 'purchase_orders_v2' && <PurchaseOrdersV2 detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
+        {view === 'ops_dashboard' && <OperationsDashboard goDetail={goDetail} perms={perms} />}
+        {view === 'inventory' && <Inventory detail={detail} setDetail={setDetail} perms={perms} />}
+        {view === 'forwarders' && <Forwarders detail={detail} setDetail={setDetail} goDetail={goDetail} perms={perms} />}
+        {view === 'shipments' && <Shipments goDetail={goDetail} perms={perms} />}
+        {view === 'reports_v2' && perms.canViewReports && <ReportsV2 perms={perms} />}
         {view === 'users' && isAdmin && <Users />}
       </div>
 

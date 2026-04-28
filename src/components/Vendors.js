@@ -31,6 +31,7 @@ export default function Vendors({ detail, setDetail, goDetail, perms }) {
 
   const save = async () => {
     const data = { ...form };
+    if (data.leadTimeDays !== undefined && data.leadTimeDays !== '') data.leadTimeDays = Number(data.leadTimeDays) || 0;
     if (data.id) {
       const { id, ...rest } = data;
       await updateDoc(doc(db, 'vendors', id), rest);
@@ -53,7 +54,8 @@ export default function Vendors({ detail, setDetail, goDetail, perms }) {
     { key: 'email', label: 'Email', type: 'email' },
     { key: 'phone', label: 'Phone', type: 'text' },
     { key: 'territory', label: 'Territory', type: 'text' },
-    { key: 'leadTime', label: 'Lead time', type: 'text' },
+    { key: 'leadTime', label: 'Lead time (text description)', type: 'text' },
+    { key: 'leadTimeDays', label: 'Lead time (days, used by Scheduler)', type: 'number' },
     { key: 'status', label: 'Status', type: 'select', options: [
       { value: 'Preferred', label: 'Preferred' },
       { value: 'Active', label: 'Active' },
@@ -85,7 +87,8 @@ export default function Vendors({ detail, setDetail, goDetail, perms }) {
               <div className="detail-field"><label>Email</label><p style={{ color: '#2563eb' }}>{selected.email || '—'}</p></div>
               <div className="detail-field"><label>Phone</label><p>{selected.phone || '—'}</p></div>
               <div className="detail-field"><label>Territory</label><p>{selected.territory || '—'}</p></div>
-              <div className="detail-field"><label>Lead time</label><p>{selected.leadTime || '—'}</p></div>
+              <div className="detail-field"><label>Lead time</label><p>{selected.leadTime || (selected.leadTimeDays ? `${selected.leadTimeDays} days` : '—')}</p></div>
+              <div className="detail-field"><label>Lead time (days)</label><p>{selected.leadTimeDays ? `${selected.leadTimeDays} days` : <span style={{ color: '#ef4444', fontSize: 12 }}>Not set — Scheduler will default to 14d</span>}</p></div>
               <div className="detail-field"><label>Status</label><p><span className={`badge ${selected.status}`}>{selected.status}</span></p></div>
             </div>
             {selected.notes && <div className="notes-box">{selected.notes}</div>}
