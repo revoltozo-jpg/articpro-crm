@@ -21,18 +21,19 @@ import Forwarders from './components/Forwarders';
 import Shipments from './components/Shipments';
 import ReportsV2 from './components/ReportsV2';
 import NotificationBell from './components/NotificationBell';
+import HelpCenter from './components/HelpCenter';
 import './App.css';
 
 const INACTIVITY_MS = 30 * 60 * 1000;
 const WARNING_MS = 60 * 1000;
 
 const icons = {
-  dashboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
+  ops_dashboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
   customers: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
-  orders: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
+  orders_v2: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   vendors: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-  purchase_orders: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
-  reports: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  purchase_orders_v2: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>,
+  reports_v2: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
   users: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
 };
 
@@ -133,9 +134,10 @@ export default function App() {
   const [userRole, setUserRole] = useState('viewer');
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [view, setView] = useState('dashboard');
+  const [view, setView] = useState('ops_dashboard');
   const [detail, setDetail] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleLogout = useCallback(() => {
     signOut(auth);
@@ -199,26 +201,22 @@ export default function App() {
 
   const navGroups = [
     { label: 'Overview', items: [
-      { key: 'dashboard', label: 'Dashboard' },
-      ...(perms.canViewReports ? [{ key: 'reports', label: 'Reports' }] : []),
+      { key: 'ops_dashboard', label: 'Dashboard' },
+      ...(perms.canViewReports ? [{ key: 'reports_v2', label: 'Reports' }] : []),
     ]},
     { label: 'Sales', items: [
       { key: 'customers', label: 'Customers' },
-      { key: 'orders', label: 'Customer orders' },
+      { key: 'orders_v2', label: 'Sales orders' },
     ]},
     { label: 'Procurement', items: [
       { key: 'vendors', label: 'Vendors' },
-      { key: 'purchase_orders', label: 'Purchase orders' },
-    ]},
-    { label: 'Operations (v2)', items: [
-      { key: 'ops_dashboard', label: 'Operations dashboard' },
-      { key: 'orders_v2', label: 'Sales orders' },
-      { key: 'scheduler', label: 'Scheduler' },
       { key: 'purchase_orders_v2', label: 'Vendor POs' },
+    ]},
+    { label: 'Operations', items: [
+      { key: 'scheduler', label: 'Scheduler' },
       { key: 'shipments', label: 'Shipments' },
       { key: 'inventory', label: 'Inventory' },
       { key: 'forwarders', label: 'Forwarders' },
-      ...(perms.canViewReports ? [{ key: 'reports_v2', label: 'Reports (v2)' }] : []),
     ]},
     ...(isAdmin ? [{ label: 'Admin', items: [{ key: 'users', label: 'User management' }] }] : []),
   ];
@@ -252,8 +250,14 @@ export default function App() {
           </div>
         ))}
 
+        <div style={{ padding: '12px 16px', borderTop: '1px solid #1e3a8a', marginTop: 8 }}>
+          <button onClick={() => setShowHelp(true)} style={{ width: '100%', padding: '8px', background: '#1a2744', border: '1px solid #1e3a8a', borderRadius: 8, color: '#93c5fd', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 500 }}>
+            📚 Learn to use me
+          </button>
+        </div>
+
         {perms.canImport && (
-          <div style={{ padding: '12px 16px', borderTop: '1px solid #1e3a8a', marginTop: 8 }}>
+          <div style={{ padding: '0 16px 12px' }}>
             <button onClick={() => setShowImport(true)} style={{ width: '100%', padding: '8px', background: '#1a2744', border: '1px solid #1e3a8a', borderRadius: 8, color: '#93c5fd', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 500 }}>
               📂 Import from Excel
             </button>
@@ -292,6 +296,7 @@ export default function App() {
       </div>
 
       {showImport && <Import onClose={() => setShowImport(false)} />}
+      {showHelp && <HelpCenter onClose={() => setShowHelp(false)} />}
       {showChangePassword && (
         <ChangePassword forced={false} onClose={(success) => {
           setShowChangePassword(false);
